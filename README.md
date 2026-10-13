@@ -63,22 +63,31 @@ PostgreSQL — mesmo que a API esqueça de filtrar, o banco filtra.
 ```
 visionflow-api/
 ├── cmd/
-│   └── api/                        # Entrypoint da API
-│       └── main.go
-├── internal/                       # (futuro) lógica interna
-│   ├── config/                     # Configurações
-│   ├── db/                         # Conexão com o banco
-│   ├── handlers/                   # Handlers HTTP
-│   └── middleware/                 # Middlewares (JWT, tenant, etc)
+│   └── api/
+│       └── main.go                 # Entrypoint da API
+├── internal/
+│   ├── httpapi/                    # Handlers, rotas, middleware, swagger
+│   │   ├── handler.go
+│   │   ├── handler_test.go
+│   │   ├── middleware.go
+│   │   ├── routes.go
+│   │   └── swagger.go
+│   ├── logger/                     # Logger estruturado
+│   ├── mockdata/                   # Dados mockados (temporário)
+│   ├── models/                     # Structs de domínio
+│   └── service/                    # Camada de serviço
 ├── db/
-│   ├── flyway.conf                 # Config Flyway (NÃO commitar)
-│   ├── migrations/                 # Migrations versionadas
+│   ├── flyway.conf.example         # Template de config do Flyway
+│   ├── README.md                   # Detalhes de banco
+│   ├── migrations/                 # Migrations versionadas (V001 → V006)
 │   │   ├── V001__nucleo_saas.sql
 │   │   ├── V002__cadastros_base.sql
 │   │   ├── V003__cadastros_operacionais.sql
 │   │   ├── V004__tabelas_filho.sql
-│   │   └── V005__rls.sql
-│   ├── seeds/                      # Dados de teste
+│   │   ├── V005__rls.sql
+│   │   └── V006__indices_unicos_seeds.sql
+│   ├── seeds/
+│   │   └── demo_comercial/         # Dados de demonstração
 │   └── scripts/                    # Automação
 │       ├── reset_db.sh
 │       └── backup.sh
@@ -86,11 +95,12 @@ visionflow-api/
 │   └── infraestrutura/
 │       ├── visionflow-api-cloudflare-tunnel-dominio.html
 │       └── visionflow-api-postgresql-infraestrutura.html
-├── tools/
-│   └── flyway-13.7.0/              # Ferramenta (NÃO commitar)
+├── tools/                          # Flyway (NÃO commitar — ver .gitignore)
+├── .env.example
 ├── .gitignore
 ├── go.mod
 ├── go.sum
+├── test-api.sh
 └── README.md
 ```
 
@@ -135,14 +145,38 @@ Para gerar uma chave JWT forte:
 openssl rand -base64 32
 ```
 
-### 2. Aplicar migrations
+### 2. Configurar o Flyway
+
+O binário do Flyway **não é versionado**. Baixe e coloque em `tools/`:
+
+```bash
+mkdir -p tools
+cd tools
+wget https://download.red-gate.com/maven/release/com/redgate/flyway/flyway-commandline/13.7.0/flyway-commandline-13.7.0-linux-x64.tar.gz
+tar -xzf flyway-commandline-13.7.0-linux-x64.tar.gz
+cd ..
+```
+
+> Alternativa: use um Flyway instalado globalmente (`which flyway`).
+
+Depois, copie o template de configuração:
+
+```bash
+cp db/flyway.conf.example db/flyway.conf
+# edite db/flyway.conf com a senha do banco
+```
+
+### 3. Aplicar migrations
 
 ```bash
 flyway -configFiles=./db/flyway.conf info
 flyway -configFiles=./db/flyway.conf migrate
 ```
 
-### 3. Rodar a API
+> Se preferir usar o Flyway de `tools/`, ajuste o caminho:
+> `./tools/flyway-13.7.0/flyway -configFiles=./db/flyway.conf migrate`
+
+### 4. Rodar a API
 
 ```bash
 go mod tidy
@@ -231,7 +265,7 @@ O banco segue o padrão multi-tenant com **62 tabelas**:
 
 ### Flyway
 
-O projeto usa **Flyway** para versionar o schema. Estado atual: **versão 5**.
+O projeto usa **Flyway** para versionar o schema. Estado atual: **versão 6**.
 
 **Comandos principais:**
 
@@ -250,7 +284,7 @@ flyway -configFiles=./db/flyway.conf validate
 
 1. Nomeie como `V<versão>__<descrição>.sql` (dois underscores!)
 
-   Exemplo: `V006__adiciona_campo_observacao_cliente.sql`
+   Exemplo: `V007__adiciona_campo_observacao_cliente.sql`
 
 2. Escreva o SQL (ex: `ALTER TABLE cliente ADD COLUMN observacao TEXT;`)
 
@@ -326,6 +360,15 @@ Verifique se a senha no `.env` bate com a do usuário do banco:
 
 ```bash
 psql -h localhost -U epare -d epare_forca_de_vendas -c "SELECT 1;"
+```
+
+### Erro: `file not found: db/flyway.conf`
+
+Você não copiou o template. Rode:
+
+```bash
+cp db/flyway.conf.example db/flyway.conf
+# edite com a senha
 ```
 
 ### Erro: `relation "X" does not exist`
