@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VisionFlow API — Manual de instalação e publicação</title>
+<style>
+:root{color-scheme:light}body{font:16px/1.6 Arial,Helvetica,sans-serif;color:#202938;max-width:1020px;margin:32px auto;padding:0 22px}
+h1{color:#14243a;line-height:1.25;border-bottom:3px solid #2867d7;padding-bottom:14px}
+h2{margin-top:34px;color:#1e4f91;border-bottom:1px solid #d7e0eb;padding-bottom:6px}h3{margin-top:24px;color:#26364a}
+code,pre{font-family:Consolas,Monaco,monospace}code{background:#f0f3f7;padding:2px 5px;border-radius:4px;overflow-wrap:anywhere}
+pre{background:#f5f7fa;border:1px solid #d9e1eb;border-radius:6px;padding:14px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}
+table{width:100%;border-collapse:collapse;margin:14px 0}th,td{border:1px solid #d6dee8;padding:9px 11px;text-align:left;vertical-align:top}th{background:#edf2f8}
+.note{background:#fff7e5;border-left:4px solid #e3a008;padding:12px 16px;margin:16px 0}.ok{color:#176b3a;font-weight:bold}.meta{color:#526174}
+li{margin:5px 0}footer{margin-top:40px;border-top:1px solid #d8e0ea;padding-top:12px;color:#64748b;font-size:.9rem}
+@media print{body{margin:10mm;max-width:none}pre{white-space:pre-wrap}}
+</style>
+</head>
+<body>
+<h1>VisionFlow API — Manual de instalação, infraestrutura e publicação</h1>
+<p class="meta"><strong>Projeto:</strong> VisionFlow API (Go)<br>
+<strong>Última atualização:</strong> 12/10/2026<br>
+<strong>Ambiente conhecido:</strong> Ubuntu 24.04 LTS, x86_64, Go 1.24.9, cloudflared 2026.10.0<br>
+<strong>Finalidade:</strong> registrar a configuração atual e orientar a preparação de um ambiente novo.</p>
+
+<div class="note"><strong>Importante — distinguir o que já foi validado do que ainda é procedimento recomendado:</strong> o túnel e o endpoint público foram testados com sucesso. A API Go foi iniciada manualmente durante o teste. A configuração de inicialização automática da API via systemd ainda está pendente. Os comandos abaixo incluem verificações e um procedimento recomendado de recuperação; valide-os antes de aplicar em produção.</div>
+
+<h2>1. Arquitetura atual</h2>
+<pre>Cliente / frontend React
+        |
+        | HTTPS
+        v
+https://api.programadordelphi.com.br
+        |
+        v
+Cloudflare (DNS e HTTPS público)
+        |
+        v
+Cloudflare Tunnel: forca-de-vendas
+        |
+        v
+cloudflared no Ubuntu
+        |
+        | HTTP local
+        v
+http://localhost:8080
+        |
+        v
+API Go do VisionFlow</pre>
+<p>O HTTPS é oferecido publicamente pela Cloudflare. A origem do túnel é <code>http://localhost:8080</code>. Não é necessário configurar HTTPS dentro da API Go para este arranjo. O PostgreSQL deve permanecer privado; não publicar a porta 5432 na internet.</p>
+
+<h2>2. Inventário conhecido</h2>
+<table>
+<tr><th>Item</th><th>Valor conhecido</th></tr>
+<tr><td>Sistema operacional</td><td>Ubuntu 24.04.5 LTS, x86_64</td></tr>
+<tr><td>Projeto da API</td><td><code>~/Documents/VisionFlow_1/visionflow-api</code></td></tr>
+<tr><td>Módulo Go</td><td><code>github.com/celsolenonsander/visionflow-api</code></td></tr>
+<tr><td>Comando usado para executar a API durante o teste</td><td><code>go run ./cmd/api</code></td></tr>
+<tr><td>Porta local</td><td><code>8080</code></td></tr>
+<tr><td>Go observado no ambiente</td><td><code>go1.24.9 linux/amd64</code></td></tr>
+<tr><td>cloudflared observado no ambiente</td><td><code>2026.10.0</code></td></tr>
+<tr><td>Túnel</td><td><code>forca-de-vendas</code></td></tr>
+<tr><td>Hostname público da API</td><td><code>api.programadordelphi.com.br</code></td></tr>
+<tr><td>Serviço de origem da rota</td><td><code>http://localhost:8080</code></td></tr>
+</table>
+
+<h2>3. Pré-requisitos e diagnóstico inicial</h2>
+<p>Em uma máquina Ubuntu nova, atualize os pacotes e instale ferramentas básicas. Este é um procedimento recomendado para preparar o ambiente; não representa necessariamente o histórico exato dos comandos usados na máquina atual.</p>
+<pre>sudo apt update
+sudo apt install -y git curl ca-certificates</pre>
+<p>Verifique o ambiente:</p>
+<pre>lsb_release -a
+uname -m
+git --version
+curl --version</pre>
+<p>O sistema atual é Ubuntu 24.04 LTS e a arquitetura observada é x86_64. A versão do Go deve ser compatível com a diretiva <code>go</code> do arquivo <code>go.mod</code> e com o projeto.</p>
+
+<h2>4. Instalação/validação do Go</h2>
+<p>No ambiente atual, o comando <code>go version</code> retornou <code>go1.24.9 linux/amd64</code>. Para não sobrescrever uma instalação funcional, primeiro verifique:</p>
+<pre>go version
+which go
+go env GOPATH
+go env GOMOD</pre>
+<p>Se Go não estiver instalado, consulte o procedimento oficial de instalação para Linux e escolha uma versão compatível com o <code>go.mod</code>: <code>https://go.dev/doc/install</code>. Após a instalação, abra um novo terminal e valide com <code>go version</code>. Evite manter duas instalações diferentes de Go no PATH.</p>
+
+<h2>5. Obter o código e instalar dependências</h2>
+<p>O caminho local conhecido é <code>~/Documents/VisionFlow_1/visionflow-api</code>. Para uma máquina nova, clone o repositório Git oficial do projeto. O endereço remoto não foi registrado neste documento; consulte o campo remoto no computador atual:</p>
+<pre>cd ~/Documents/VisionFlow_1/visionflow-api
+git remote -v
+git status
+cat go.mod</pre>
+<p>Em uma máquina nova, use o endereço confirmado por <code>git remote -v</code>:</p>
+<pre>mkdir -p ~/Documents/VisionFlow_1
+cd ~/Documents/VisionFlow_1
+git clone &lt;URL_DO_REPOSITORIO_VISIONFLOW_API&gt; visionflow-api
+cd visionflow-api</pre>
+<p>Substitua <code>&lt;URL_DO_REPOSITORIO_VISIONFLOW_API&gt;</code> pela URL real do repositório. Não adivinhe nem publique credenciais embutidas na URL.</p>
+<p>Baixe e valide as dependências Go declaradas pelo projeto:</p>
+<pre>go mod download
+go mod verify
+go test ./...</pre>
+<p>Se os testes passarem, compile a API:</p>
+<pre>go build -o ./bin/visionflow-api ./cmd/api</pre>
+<p>Se a compilação reclamar de dependências ou versão, confira <code>go.mod</code> e <code>go.sum</code>. Não remova nem regenere esses arquivos sem entender a alteração.</p>
+
+<h2>6. Executar e testar a API localmente</h2>
+<p>O comando usado durante a configuração foi:</p>
+<pre>cd ~/Documents/VisionFlow_1/visionflow-api
+go run ./cmd/api</pre>
+<p>Mantenha esse terminal aberto enquanto estiver usando a execução manual. Em outro terminal, teste:</p>
+<pre>curl -i http://localhost:8080/health</pre>
+<p>Resultado esperado: HTTP 200 e resposta semelhante a:</p>
+<pre>{"success":true,"data":{"status":"ok"},"error":null}</pre>
+<p>Swagger local, quando a API estiver em execução:</p>
+<pre>http://localhost:8080/swagger/index.html</pre>
+<p>Se a porta estiver ocupada, identifique o processo antes de encerrá-lo:</p>
+<pre>sudo ss -ltnp | grep ':8080'</pre>
+
+<h2>7. Cloudflare: domínio e DNS</h2>
+<ol>
+<li>O domínio usado é <code>programadordelphi.com.br</code>.</li>
+<li>Os nameservers do domínio foram alterados na Hostinger para os fornecidos pela Cloudflare.</li>
+<li>O domínio foi confirmado como <em>Active</em> no painel Cloudflare.</li>
+<li>O site existente <code>www.programadordelphi.com.br</code> deve ser preservado.</li>
+<li>A rota pública da API usa o hostname <code>api.programadordelphi.com.br</code>.</li>
+</ol>
+<p>Não altere os nameservers novamente sem necessidade. Ao administrar registros DNS, confirme que os registros do site principal e de outros serviços continuam presentes.</p>
+
+<h2>8. Cloudflare Tunnel e hostname público</h2>
+<p>O túnel foi criado no painel Cloudflare com o nome <code>forca-de-vendas</code>. A rota configurada é uma aplicação publicada com estes valores:</p>
+<table>
+<tr><th>Campo</th><th>Valor</th></tr>
+<tr><td>Subdomínio</td><td><code>api</code></td></tr>
+<tr><td>Domínio</td><td><code>programadordelphi.com.br</code></td></tr>
+<tr><td>Path</td><td>Vazio</td></tr>
+<tr><td>Service / URL de origem</td><td><code>http://localhost:8080</code></td></tr>
+</table>
+<p>O hostname final é <code>api.programadordelphi.com.br</code>. O DNS necessário é gerenciado pela configuração da rota no painel Cloudflare. O painel mostrou o túnel como <em>Healthy</em> após a instalação do agente.</p>
+
+<h2>9. Instalação e verificação do cloudflared</h2>
+<p>O <code>cloudflared</code> foi instalado como serviço Linux, e o painel mostrou a versão <code>2026.10.0</code>. Para verificar a máquina atual:</p>
+<pre>cloudflared --version
+sudo systemctl status cloudflared --no-pager
+sudo journalctl -u cloudflared -n 100 --no-pager</pre>
+<p>Para instalar em outra máquina, use as instruções oficiais de instalação do Cloudflare para a distribuição Linux e arquitetura corretas: <code>https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/</code>. Depois, siga o procedimento indicado no painel Cloudflare para conectar o túnel remoto gerenciado e instalar o serviço.</p>
+<div class="note"><strong>Token:</strong> não copie tokens para este documento, para o Jira, para o Git ou para mensagens. O token de instalação do túnel foi exposto durante a sessão de configuração; rotacione/revogue-o no painel Cloudflare e atualize o serviço com o novo token antes de usar em produção. Não execute comandos contendo token em capturas de tela ou logs compartilhados.</div>
+
+<h2>10. Testar a API pública e HTTPS</h2>
+<p>Com a API Go em execução local e o túnel ativo, rode:</p>
+<pre>curl -i https://api.programadordelphi.com.br/health</pre>
+<p>Resultado validado em 12/10/2026:</p>
+<pre>HTTP/2 200
+content-type: application/json
+server: cloudflare
+
+{"success":true,"data":{"status":"ok"},"error":null}</pre>
+<p class="ok">Validação concluída: a chamada HTTPS pública chegou à API e retornou HTTP 200.</p>
+<p>Swagger público:</p>
+<pre>https://api.programadordelphi.com.br/swagger/index.html</pre>
+<p>Se houver falha, confira separadamente: API local (<code>curl http://localhost:8080/health</code>), serviço <code>cloudflared</code>, rota do túnel no painel, DNS e certificado HTTPS.</p>
+
+<h2>11. Configurar a API como serviço systemd — pendente</h2>
+<p><strong>Esta etapa ainda não foi executada.</strong> A API estava rodando com <code>go run ./cmd/api</code>. Antes de criar o serviço, é necessário confirmar:</p>
+<ul>
+<li>o caminho final do binário compilado;</li>
+<li>o usuário Linux que deve executar a API;</li>
+<li>as variáveis de ambiente obrigatórias;</li>
+<li>o diretório de trabalho correto;</li>
+<li>se a API precisa de acesso ao PostgreSQL e como as credenciais serão fornecidas com segurança.</li>
+</ul>
+<p>Não crie um arquivo systemd definitivo com valores presumidos. Depois de confirmar esses detalhes, documente a unidade do serviço, permissões, comando de ativação e os comandos de diagnóstico. Os comandos de operação normalmente usados serão:</p>
+<pre>sudo systemctl status visionflow-api --no-pager
+sudo journalctl -u visionflow-api -n 100 --no-pager
+sudo journalctl -u visionflow-api -f</pre>
+<p>Esses comandos só funcionarão depois que a unidade <code>visionflow-api</code> for criada e habilitada.</p>
+
+<h2>12. Variáveis de ambiente e segredos</h2>
+<ul>
+<li>Não versionar senhas, tokens JWT, tokens Cloudflare, chaves privadas ou credenciais do banco.</li>
+<li>Usar variáveis de ambiente ou um arquivo de configuração protegido por permissões do sistema.</li>
+<li>Se for usado um arquivo de ambiente para systemd, restringir leitura ao usuário/root apropriado e não adicioná-lo ao Git.</li>
+<li>Manter um arquivo de exemplo, como <code>.env.example</code>, apenas com nomes de variáveis e valores fictícios, se o projeto usar esse padrão.</li>
+<li>Confirmar que logs não registram tokens, senhas ou dados sensíveis.</li>
+</ul>
+
+<h2>13. PostgreSQL e segurança</h2>
+<ul>
+<li>Não publicar a porta TCP 5432 para a internet.</li>
+<li>Se a API usa PostgreSQL, manter o banco acessível apenas pela rede local/privada necessária.</li>
+<li>Validar autenticação e autorização no backend; não confiar em um <code>tenant_id</code> enviado pelo frontend para isolar empresas.</li>
+<li>Configurar CORS permitindo somente as origens reais do frontend.</li>
+<li>Verificar que endpoints de Swagger e diagnóstico estejam adequados ao ambiente de produção.</li>
+<li>Usar HTTPS no acesso público e manter Ubuntu, Go e <code>cloudflared</code> atualizados.</li>
+</ul>
+
+<h2>14. Problema encontrado durante a configuração</h2>
+<p>A primeira rota usava <code>api.forcadevendas.programadordelphi.com.br</code> e falhava na negociação TLS. O painel avisava que subdomínios com vários níveis podem exigir Advanced Certificate Manager. A rota foi alterada para <code>api.programadordelphi.com.br</code>, preservando a origem <code>http://localhost:8080</code>. Depois da alteração, o teste público retornou HTTP 200.</p>
+
+<h2>15. URLs importantes</h2>
+<table>
+<tr><th>Recurso</th><th>Endereço</th></tr>
+<tr><td>Health check público</td><td><code>https://api.programadordelphi.com.br/health</code></td></tr>
+<tr><td>Swagger público</td><td><code>https://api.programadordelphi.com.br/swagger/index.html</code></td></tr>
+<tr><td>API local</td><td><code>http://localhost:8080</code></td></tr>
+<tr><td>Swagger local</td><td><code>http://localhost:8080/swagger/index.html</code></td></tr>
+<tr><td>Site existente</td><td><code>https://www.programadordelphi.com.br</code></td></tr>
+</table>
+
+<h2>16. Checklist de status</h2>
+<table>
+<tr><th>Item</th><th>Status</th></tr>
+<tr><td>Domínio ativo na Cloudflare</td><td class="ok">Concluído</td></tr>
+<tr><td>Túnel <code>forca-de-vendas</code> criado e saudável</td><td class="ok">Concluído</td></tr>
+<tr><td>Rota <code>api.programadordelphi.com.br</code> → <code>http://localhost:8080</code></td><td class="ok">Concluído</td></tr>
+<tr><td>Teste público <code>/health</code> via HTTPS</td><td class="ok">Concluído — HTTP 200</td></tr>
+<tr><td>Documentar URL real do repositório Git</td><td>Pendente</td></tr>
+<tr><td>Confirmar variáveis de ambiente necessárias</td><td>Pendente</td></tr>
+<tr><td>Configurar API Go via systemd</td><td>Pendente</td></tr>
+<tr><td>Rotacionar token do túnel exposto</td><td>Pendente — antes de produção</td></tr>
+<tr><td>Revisar CORS, autenticação e isolamento multi-tenant</td><td>Pendente antes de produção</td></tr>
+</table>
+
+<h2>17. Referências oficiais</h2>
+<ul>
+<li>Instalação do Go: <code>https://go.dev/doc/install</code></li>
+<li>Downloads do cloudflared: <code>https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/</code></li>
+<li>Documentação do Cloudflare Tunnel: <code>https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/</code></li>
+<li>Documentação de systemd no Ubuntu: <code>https://documentation.ubuntu.com/server/</code></li>
+</ul>
+
+<footer>Documento para versionamento no repositório e referência em tarefa Jira. Atualize este manual quando novas etapas forem executadas. Não armazene credenciais ou tokens neste arquivo.</footer>
+</body>
+</html>

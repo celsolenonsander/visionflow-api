@@ -1,0 +1,24 @@
+# ============================================================
+# Flyway — Configuração de EXEMPLO (VisionFlow API)
+# ============================================================
+# Copie este arquivo para db/flyway.conf e preencha com seus
+# valores locais. O arquivo flyway.conf NÃO é versionado.
+#
+#   cp db/flyway.conf.example db/flyway.conf
+# ============================================================
+
+flyway.url=jdbc:postgresql://localhost:5432/epare_forca_de_vendas
+flyway.user=epare
+flyway.password=TROCAR_PELA_SUA_SENHA
+flyway.schemas=public
+
+flyway.locations=filesystem:./db/migrations
+
+flyway.table=flyway_schema_history
+
+flyway.encoding=UTF-8
+
+flyway.cleanDisabled=true
+
+flyway.baselineVersion=0
+flyway.baselineDescription=Baseline inicial VisionFlow API

@@ -1,0 +1,1093 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VisionFlow API — Manual de Instalação da Infraestrutura</title>
+<style>
+  :root {
+    --primary: #0066cc;
+    --primary-dark: #004a99;
+    --success: #16a34a;
+    --warning: #f59e0b;
+    --danger: #dc2626;
+    --bg: #f8fafc;
+    --card: #ffffff;
+    --border: #e2e8f0;
+    --text: #1e293b;
+    --muted: #64748b;
+    --code-bg: #1e293b;
+    --code-text: #e2e8f0;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    padding: 0;
+  }
+  .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+
+  /* Header */
+  header {
+    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+    color: white;
+    padding: 40px 20px;
+    margin-bottom: 30px;
+    border-radius: 0 0 12px 12px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+  }
+  header h1 { font-size: 2rem; margin-bottom: 10px; }
+  header p { opacity: 0.9; font-size: 1.05rem; }
+  header .meta {
+    margin-top: 15px;
+    font-size: 0.9rem;
+    opacity: 0.85;
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+  }
+
+  /* Layout */
+  .layout {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    gap: 30px;
+    align-items: start;
+  }
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: 1fr; }
+    nav.toc { position: static !important; }
+  }
+
+  /* TOC */
+  nav.toc {
+    position: sticky;
+    top: 20px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+    max-height: calc(100vh - 40px);
+    overflow-y: auto;
+  }
+  nav.toc h3 {
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    color: var(--muted);
+    letter-spacing: 0.5px;
+    margin-bottom: 12px;
+  }
+  nav.toc ol {
+    list-style: none;
+    counter-reset: item;
+  }
+  nav.toc li {
+    margin-bottom: 6px;
+    counter-increment: item;
+  }
+  nav.toc a {
+    color: var(--text);
+    text-decoration: none;
+    font-size: 0.92rem;
+    display: block;
+    padding: 6px 8px;
+    border-radius: 6px;
+    transition: background 0.15s;
+  }
+  nav.toc a:hover { background: var(--bg); color: var(--primary); }
+  nav.toc a::before {
+    content: counter(item) ". ";
+    color: var(--muted);
+    font-weight: 600;
+  }
+
+  /* Content */
+  main { min-width: 0; }
+  section {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 30px;
+    margin-bottom: 25px;
+    scroll-margin-top: 20px;
+  }
+  section h2 {
+    font-size: 1.5rem;
+    color: var(--primary-dark);
+    margin-bottom: 15px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--border);
+  }
+  section h3 {
+    font-size: 1.15rem;
+    color: var(--text);
+    margin: 25px 0 12px;
+  }
+  section h4 {
+    font-size: 1rem;
+    color: var(--primary-dark);
+    margin: 20px 0 10px;
+  }
+  section p { margin-bottom: 12px; }
+  section ul, section ol { margin: 12px 0 12px 25px; }
+  section li { margin-bottom: 6px; }
+
+  /* Code */
+  pre {
+    background: var(--code-bg);
+    color: var(--code-text);
+    padding: 18px;
+    border-radius: 8px;
+    overflow-x: auto;
+    font-size: 0.88rem;
+    line-height: 1.5;
+    margin: 12px 0;
+    font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  code {
+    background: #f1f5f9;
+    color: #be185d;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.9em;
+    font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
+  }
+  pre code { background: none; color: inherit; padding: 0; }
+
+  /* Callouts */
+  .callout {
+    border-left: 4px solid var(--primary);
+    background: #eff6ff;
+    padding: 15px 18px;
+    border-radius: 6px;
+    margin: 15px 0;
+  }
+  .callout.success { border-color: var(--success); background: #f0fdf4; }
+  .callout.warning { border-color: var(--warning); background: #fffbeb; }
+  .callout.danger  { border-color: var(--danger);  background: #fef2f2; }
+  .callout strong { display: block; margin-bottom: 6px; }
+
+  /* Tables */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 15px 0;
+    font-size: 0.92rem;
+  }
+  th, td {
+    text-align: left;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  th {
+    background: var(--bg);
+    font-weight: 600;
+    color: var(--primary-dark);
+  }
+  tr:hover { background: #f8fafc; }
+
+  /* Badges */
+  .badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+  .badge.ok    { background: #dcfce7; color: #166534; }
+  .badge.info  { background: #dbeafe; color: #1e40af; }
+  .badge.warn  { background: #fef3c7; color: #92400e; }
+  .badge.err   { background: #fee2e2; color: #991b1b; }
+
+  /* Steps */
+  .step {
+    display: flex;
+    gap: 15px;
+    margin: 20px 0;
+    padding: 15px;
+    background: var(--bg);
+    border-radius: 8px;
+  }
+  .step-num {
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    background: var(--primary);
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.9rem;
+  }
+  .step-content { flex: 1; min-width: 0; }
+  .step-content h4 { margin-top: 0; }
+
+  /* Placeholder highlight */
+  .placeholder {
+    background: #fef3c7;
+    color: #92400e;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-family: monospace;
+    font-weight: 600;
+  }
+
+  /* Footer */
+  footer {
+    text-align: center;
+    padding: 30px 20px;
+    color: var(--muted);
+    font-size: 0.9rem;
+    border-top: 1px solid var(--border);
+    margin-top: 40px;
+  }
+
+  /* Print */
+  @media print {
+    nav.toc { display: none; }
+    .layout { grid-template-columns: 1fr; }
+    section { break-inside: avoid; box-shadow: none; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="container">
+    <h1>⚙️ VisionFlow API</h1>
+    <p>Manual de Instalação e Configuração da Infraestrutura</p>
+    <div class="meta">
+      <span>📅 Última atualização: <span id="data"></span></span>
+      <span>🐘 PostgreSQL 16 + Ubuntu 24.04 LTS</span>
+      <span>📌 Versão: 1.0</span>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <div class="layout">
+
+    <!-- ============== TOC ============== -->
+    <nav class="toc">
+      <h3>Índice</h3>
+      <ol>
+        <li><a href="#visao-geral">Visão Geral</a></li>
+        <li><a href="#arquitetura">Arquitetura e Decisões</a></li>
+        <li><a href="#pre-requisitos">Pré-requisitos</a></li>
+        <li><a href="#instalacao-postgres">Instalação do PostgreSQL</a></li>
+        <li><a href="#criacao-banco">Criação do Banco e Usuário</a></li>
+        <li><a href="#permissoes-schema">Permissões do Schema</a></li>
+        <li><a href="#parte1-nucleo">Parte 1 — Núcleo SaaS</a></li>
+        <li><a href="#parte2-cadastros">Parte 2 — Cadastros Base</a></li>
+        <li><a href="#parte3-operacionais">Parte 3 — Cadastros Operacionais</a></li>
+        <li><a href="#parte4-filhos">Parte 4 — Tabelas Filho</a></li>
+        <li><a href="#parte5-rls">Parte 5 — Row-Level Security</a></li>
+        <li><a href="#testes">Testes de Validação</a></li>
+        <li><a href="#backup">Backup Automático</a></li>
+        <li><a href="#troubleshooting">Troubleshooting</a></li>
+        <li><a href="#recriar">Como Recriar do Zero</a></li>
+        <li><a href="#glossario">Glossário</a></li>
+      </ol>
+    </nav>
+
+    <!-- ============== MAIN ============== -->
+    <main>
+
+      <!-- ============ 1. VISÃO GERAL ============ -->
+      <section id="visao-geral">
+        <h2>1. Visão Geral</h2>
+        <p>Este documento descreve <strong>passo a passo</strong> como instalar, configurar e validar a infraestrutura de banco de dados do <strong>VisionFlow API</strong> — um sistema SaaS multi-tenant com suporte a <em>white label</em> (revendedores).</p>
+
+        <h3>O que o sistema faz</h3>
+        <ul>
+          <li><strong>Força de vendas</strong> externa (representantes) usando app mobile/web</li>
+          <li><strong>Multi-tenant</strong> — vários clientes na mesma base</li>
+          <li><strong>Multi-empresa</strong> — cada cliente pode ter várias filiais (CNPJs)</li>
+          <li><strong>White label</strong> — revendedores podem usar a marca própria</li>
+          <li><strong>Isolamento automático</strong> via Row-Level Security (RLS)</li>
+        </ul>
+
+        <h3>Stack tecnológica</h3>
+        <table>
+          <thead>
+            <tr><th>Camada</th><th>Tecnologia</th><th>Versão</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Sistema operacional</td><td>Ubuntu LTS</td><td>24.04 (noble)</td></tr>
+            <tr><td>Banco de dados</td><td>PostgreSQL</td><td>16</td></tr>
+            <tr><td>Interface de admin</td><td>pgAdmin 4</td><td>9.18+</td></tr>
+            <tr><td>Acesso remoto</td><td>Cloudflare Tunnel / Tailscale</td><td>—</td></tr>
+          </tbody>
+        </table>
+
+        <div class="callout">
+          <strong>ℹ️ Sobre este documento</strong>
+          Todos os comandos usam caminhos genéricos. Substitua os placeholders conforme indicado:
+          <ul style="margin-top:8px">
+            <li><span class="placeholder">&lt;USUARIO_LINUX&gt;</span> — seu usuário no Ubuntu (ex: <code>carlson</code>)</li>
+            <li><span class="placeholder">&lt;PROJETO&gt;</span> — nome da pasta do projeto (ex: <code>VisionFlow_1/visionflow-api</code>)</li>
+            <li><span class="placeholder">&lt;BANCO&gt;</span> — nome do banco (ex: <code>visionflow_db</code>)</li>
+            <li><span class="placeholder">&lt;USUARIO_DB&gt;</span> — usuário do banco (ex: <code>visionflow_admin</code>)</li>
+            <li><span class="placeholder">&lt;SENHA_FORTE&gt;</span> — senha definida por você (nunca commitar)</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- ============ 2. ARQUITETURA ============ -->
+      <section id="arquitetura">
+        <h2>2. Arquitetura e Decisões</h2>
+
+        <h3>Modelo de dados multi-tenant</h3>
+        <p>O sistema usa <strong>3 níveis de isolamento</strong>:</p>
+        <pre><code>REVENDEDOR (quem revende com marca própria — white label)
+    └── TENANT (cliente do revendedor — quem opera o sistema)
+            └── EMPRESA (CNPJ do tenant — pode ter várias)
+                    └── CLIENTE / ITEM / PEDIDO / ... (dados operacionais)</code></pre>
+
+        <h3>Por que 3 níveis e não 2?</h3>
+        <table>
+          <thead>
+            <tr><th>Camada</th><th>Por quê</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>revendedor</strong></td>
+              <td>Permite <em>white label</em>: cada revendedor usa marca própria (logo, cores, domínio) sem saber que existem outros revendedores. Você (VisionFlow) fica invisível para o cliente final.</td>
+            </tr>
+            <tr>
+              <td><strong>tenant</strong></td>
+              <td>Cada cliente do revendedor tem seus próprios dados. É o nível de <em>billing</em>, controle de usuários e limites de uso.</td>
+            </tr>
+            <tr>
+              <td><strong>empresa</strong></td>
+              <td>Um tenant pode ter várias filiais (CNPJs diferentes). Ex: "Distribuidora João" tem matriz e 3 filiais.</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3>Por que PostgreSQL e não Firebird?</h3>
+        <p>O ERP dos clientes usa Firebird 2.5, mas o SaaS <strong>não pode</strong> usar Firebird como banco principal por vários motivos:</p>
+        <ul>
+          <li>Firebird 2.5 é de 2010 e está sem atualizações há anos</li>
+          <li>Não tem <strong>Row-Level Security (RLS)</strong> — isolamento dependia 100% do código da aplicação</li>
+          <li>Migração para nuvem seria muito difícil</li>
+          <li>PostgreSQL é gratuito, suporta RLS nativo, tem ferramentas e comunidade enormes</li>
+        </ul>
+
+        <div class="callout success">
+          <strong>✅ Decisão</strong>
+          Firebird fica apenas no lado do cliente (ERP). Nosso SaaS usa PostgreSQL 16. A integração entre os dois é feita pela camada de API.
+        </div>
+
+        <h3>Por que RLS?</h3>
+        <p>Row-Level Security faz o banco filtrar dados automaticamente baseado em uma variável de sessão. Vantagens:</p>
+        <ul>
+          <li>Se a API esquecer de filtrar por tenant, o banco filtra</li>
+          <li>Impossível vazar dados entre tenants por bug de código</li>
+          <li>Auditoria e LGPD ficam mais simples</li>
+        </ul>
+
+        <h3>Por que <code>codigo_erp</code> e não <code>seu_codigo_*</code>?</h3>
+        <p>Nos layouts originais do integrador, os campos eram chamados <code>seu_codigo_cliente</code>, <code>seu_codigo_item</code>, etc. Era uma convenção do integrador (&quot;o código do cliente no <em>seu</em> ERP&quot;). Na nossa base, renomeamos para <code>codigo_erp</code> porque:</p>
+        <ul>
+          <li>Auto-documenta que é um código externo (do ERP)</li>
+          <li>Fica mais curto e direto</li>
+          <li>O ID interno (numérico) já se chama <code>codigo</code></li>
+        </ul>
+
+        <h3>Por que <code>BOOLEAN</code> no <code>ativo</code>?</h3>
+        <p>O ERP do cliente usa <code>'A'</code>, <code>'I'</code>, <code>'ADM'</code> para ativo/inativo. Como <code>'ADM'</code> significa &quot;deixa o sistema decidir&quot;, na nossa base:</p>
+        <table>
+          <thead>
+            <tr><th>ERP</th><th>Nossa base</th><th>Significado</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>'A'</code></td><td><code>TRUE</code></td><td>Ativo</td></tr>
+            <tr><td><code>'I'</code></td><td><code>FALSE</code></td><td>Inativo</td></tr>
+            <tr><td><code>'ADM'</code></td><td><code>NULL</code></td><td>Usa padrão do sistema (geralmente TRUE)</td></tr>
+          </tbody>
+        </table>
+        <p>Regra de ouro: se tem <code>ADM</code> ou mais de 2 valores, mantém <code>VARCHAR</code>. Se só tem <code>S</code>/<code>N</code>, vira <code>BOOLEAN</code>.</p>
+      </section>
+
+      <!-- ============ 3. PRÉ-REQUISITOS ============ -->
+      <section id="pre-requisitos">
+        <h2>3. Pré-requisitos</h2>
+
+        <h3>Sistema</h3>
+        <ul>
+          <li>Ubuntu Server 24.04 LTS (ou Desktop)</li>
+          <li>Acesso com privilégios <code>sudo</code></li>
+          <li>Conexão com internet (para instalação)</li>
+          <li>Mínimo 2 GB de RAM (recomendado 4 GB+)</li>
+          <li>Mínimo 20 GB de disco (recomendado SSD)</li>
+        </ul>
+
+        <h3>Verificar versão do Ubuntu</h3>
+        <pre><code>lsb_release -a</code></pre>
+        <p>Saída esperada:</p>
+        <pre><code>Distributor ID: Ubuntu
+Description:    Ubuntu 24.04.x LTS
+Release:        24.04
+Codename:       noble</code></pre>
+
+        <h3>Atualizar pacotes do sistema</h3>
+        <pre><code>sudo apt update &amp;&amp; sudo apt upgrade -y</code></pre>
+      </section>
+
+      <!-- ============ 4. INSTALAR POSTGRES ============ -->
+      <section id="instalacao-postgres">
+        <h2>4. Instalação do PostgreSQL</h2>
+
+        <h3>Método 1 — Repositório do Ubuntu (recomendado para começar)</h3>
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-content">
+            <h4>Instalar o PostgreSQL e contrib</h4>
+            <pre><code>sudo apt install -y postgresql postgresql-contrib</code></pre>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-content">
+            <h4>Verificar versão instalada</h4>
+            <pre><code>psql --version</code></pre>
+            <p>No Ubuntu 24.04, vem a versão 16.15 ou superior.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-content">
+            <h4>Conferir status do serviço</h4>
+            <pre><code>sudo systemctl status postgresql
+pg_lsclusters</code></pre>
+            <p>Saída esperada (do <code>pg_lsclusters</code>):</p>
+            <pre><code>Ver Cluster Port Status Owner    Data directory              Log file
+16  main    5432 online postgres /var/lib/postgresql/16/main ...</code></pre>
+          </div>
+        </div>
+
+        <div class="callout warning">
+          <strong>⚠️ Sobre a versão</strong>
+          O PostgreSQL 16 do repositório Ubuntu já tem <strong>tudo</strong> que precisamos (RLS, JSONB, particionamento). Só vale migrar para versão mais nova (17+) se aparecer necessidade específica.
+        </div>
+
+        <h3>Método 2 — Repositório oficial do PostgreSQL (versão mais nova)</h3>
+        <p>Use apenas se precisar da versão mais recente:</p>
+        <pre><code>sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" &gt; /etc/apt/sources.list.d/pgdg.list'
+wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
+sudo apt update
+sudo apt install -y postgresql-17 postgresql-contrib-17</code></pre>
+      </section>
+
+      <!-- ============ 5. CRIAR BANCO ============ -->
+      <section id="criacao-banco">
+        <h2>5. Criação do Banco e Usuário</h2>
+
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-content">
+            <h4>Criar usuário do banco</h4>
+            <pre><code>sudo -u postgres psql</code></pre>
+            <p>Dentro do psql, execute:</p>
+            <pre><code>CREATE USER &lt;USUARIO_DB&gt; WITH PASSWORD '&lt;SENHA_FORTE&gt;';
+\q</code></pre>
+            <p>No nosso caso, foi <code>epare</code>. Você pode usar qualquer nome.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-content">
+            <h4>Criar o banco</h4>
+            <pre><code>sudo -u postgres psql -c "CREATE DATABASE &lt;BANCO&gt; OWNER &lt;USUARIO_DB&gt; ENCODING 'UTF8' TEMPLATE template0;"</code></pre>
+            <p>No nosso caso: <code>epare_forca_de_vendas</code>.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-content">
+            <h4>Permitir que o usuário crie bancos (opcional)</h4>
+            <pre><code>sudo -u postgres psql -c "ALTER USER &lt;USUARIO_DB&gt; WITH CREATEDB;"</code></pre>
+            <p>Isso permite rodar <code>DROP DATABASE</code> e <code>CREATE DATABASE</code> sem depender do <code>postgres</code>.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-num">4</div>
+          <div class="step-content">
+            <h4>Testar a conexão</h4>
+            <pre><code>psql -h localhost -U &lt;USUARIO_DB&gt; -d &lt;BANCO&gt; -c "SELECT current_user, current_database();"</code></pre>
+            <p>Saída esperada:</p>
+            <pre><code> current_user | current_database
+--------------+------------------
+ epare        | epare_forca_de_vendas</code></pre>
+          </div>
+        </div>
+
+        <div class="callout warning">
+          <strong>⚠️ Nunca commitar senhas</strong>
+          Guarde a senha em um gerenciador (Bitwarden, 1Password) ou em variável de ambiente. O arquivo <code>.pgpass</code> permite automatizar sem expor no código (veja seção de Backup).
+        </div>
+      </section>
+
+      <!-- ============ 6. PERMISSÕES SCHEMA ============ -->
+      <section id="permissoes-schema">
+        <h2>6. Permissões do Schema</h2>
+
+        <div class="callout warning">
+          <strong>⚠️ Importante — PostgreSQL 15+</strong>
+          A partir do PostgreSQL 15, o schema <code>public</code> <strong>não permite mais</strong> que usuários comuns criem tabelas por padrão. Precisamos ajustar isso manualmente.
+        </div>
+
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-content">
+            <h4>Definir o usuário como dono do schema public</h4>
+            <pre><code>sudo -u postgres psql -d &lt;BANCO&gt; -c "ALTER SCHEMA public OWNER TO &lt;USUARIO_DB&gt;;"</code></pre>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-content">
+            <h4>Dar permissões completas</h4>
+            <pre><code>sudo -u postgres psql -d &lt;BANCO&gt; -c "GRANT ALL ON SCHEMA public TO &lt;USUARIO_DB&gt;;"</code></pre>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-content">
+            <h4>Conferir</h4>
+            <pre><code>sudo -u postgres psql -d &lt;BANCO&gt; -c "\dn+"</code></pre>
+            <p>Saída esperada:</p>
+            <pre><code>  Name  | Owner | Access privileges
+--------+-------+-------------------
+ public | epare | epare=UC/epare
+                | =U/epare</code></pre>
+            <p>O <code>epare</code> precisa ser o <strong>Owner</strong>.</p>
+          </div>
+        </div>
+
+        <div class="callout success">
+          <strong>✅ Por que isso é necessário?</strong>
+          Como o schema <code>public</code> pertence ao <code>postgres</code> por padrão, o usuário da API não poderia criar tabelas. Ao transferir a posse, o <code>epare</code> fica autônomo para trabalhar.
+        </div>
+      </section>
+
+      <!-- ============ 7. PARTE 1 ============ -->
+      <section id="parte1-nucleo">
+        <h2>7. Parte 1 — Núcleo SaaS</h2>
+        <p>Esta parte cria a fundação do sistema multi-tenant: <strong>6 tabelas</strong>.</p>
+
+        <h3>Tabelas criadas</h3>
+        <table>
+          <thead>
+            <tr><th>Tabela</th><th>Função</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>revendedor</code></td><td>White label — quem revende com marca própria</td></tr>
+            <tr><td><code>tenant</code></td><td>Cliente do revendedor (opera o sistema)</td></tr>
+            <tr><td><code>empresa</code></td><td>CNPJs de cada tenant</td></tr>
+            <tr><td><code>usuario</code></td><td>Login do app (vendedor, gerente, admin)</td></tr>
+            <tr><td><code>usuario_empresa</code></td><td>Quais empresas cada usuário acessa (N:N)</td></tr>
+            <tr><td><code>log_auditoria</code></td><td>Rastreio de ações</td></tr>
+          </tbody>
+        </table>
+
+        <h3>Arquivo SQL</h3>
+        <pre><code>~/Documents/&lt;PROJETO&gt;/sql/nucleo_saas.sql</code></pre>
+
+        <h3>Aplicar</h3>
+        <pre><code>psql -h localhost -U &lt;USUARIO_DB&gt; -d &lt;BANCO&gt; -f "~/Documents/&lt;PROJETO&gt;/sql/nucleo_saas.sql"</code></pre>
+        <p>Saída esperada: termina com <code>COMMIT</code>.</p>
+
+        <h3>Validar</h3>
+        <pre><code>psql -h localhost -U &lt;USUARIO_DB&gt; -d &lt;BANCO&gt; -c "\dt"</code></pre>
+        <p>Devem aparecer as 6 tabelas.</p>
+
+        <div class="callout">
+          <strong>💡 Decisão: slug em tenant e empresa</strong>
+          Cada <code>tenant</code> e <code>empresa</code> tem um campo <code>slug</code> (nullable) para URLs amigáveis (ex: <code>app.sistema.com.br/distribuidora-joao</code>). <strong>Deixamos preparado mas opcional</strong> — se um dia quiser usar, é só preencher.
+        </div>
+      </section>
+
+      <!-- ============ 8. PARTE 2 ============ -->
+      <section id="parte2-cadastros">
+        <h2>8. Parte 2 — Cadastros Base (18 tabelas)</h2>
+
+        <h3>Tabelas criadas</h3>
+        <p>Cadastros auxiliares que alimentam as tabelas operacionais:</p>
+        <table>
+          <thead>
+            <tr><th>#</th><th>Tabela</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>1</td><td><code>unidade_medida</code></td></tr>
+            <tr><td>2</td><td><code>categoria_item</code></td></tr>
+            <tr><td>3</td><td><code>fabricante</code></td></tr>
+            <tr><td>4</td><td><code>classificacao_fiscal</code></td></tr>
+            <tr><td>5</td><td><code>grupo_cliente</code></td></tr>
+            <tr><td>6</td><td><code>ramo_atividade</code></td></tr>
+            <tr><td>7</td><td><code>rota_simples</code></td></tr>
+            <tr><td>8</td><td><code>risco_cliente</code></td></tr>
+            <tr><td>9</td><td><code>tipo_venda</code></td></tr>
+            <tr><td>10</td><td><code>tipo_frete</code></td></tr>
+            <tr><td>11</td><td><code>forma_pagamento</code></td></tr>
+            <tr><td>12</td><td><code>condicao_pagamento</code></td></tr>
+            <tr><td>13</td><td><code>transportadora</code></td></tr>
+            <tr><td>14</td><td><code>tabela_preco</code></td></tr>
+            <tr><td>15</td><td><code>unidade_negocio</code></td></tr>
+            <tr><td>16</td><td><code>representante</code></td></tr>
+            <tr><td>17</td><td><code>equipe_venda</code></td></tr>
+            <tr><td>18</td><td><code>embalagem_venda</code></td></tr>
+          </tbody>
+        </table>
+
+        <h3>Arquivo SQL</h3>
+        <pre><code>~/Documents/&lt;PROJETO&gt;/sql/cadastros_base.sql</code></pre>
+
+        <h3>Aplicar</h3>
+        <pre><code>psql -h localhost -U &lt;USUARIO_DB&gt; -d &lt;BANCO&gt; -f "~/Documents/&lt;PROJETO&gt;/sql/cadastros_base.sql"</code></pre>
+
+        <h3>Padrão das colunas</h3>
+        <ul>
+          <li><code>cod_tenant</code> + <code>cod_empresa</code> + <code>codigo</code> → PK composta</li>
+          <li><code>codigo_erp</code> → UNIQUE dentro de (tenant, empresa)</li>
+          <li><code>ativo BOOLEAN DEFAULT TRUE</code> → NULL significa &quot;usa padrão&quot;</li>
+          <li><code>dt_inclusao</code> / <code>dt_alteracao</code> → auditoria automática via trigger</li>
+        </ul>
+      </section>
+
+      <!-- ============ 9. PARTE 3 ============ -->
+      <section id="parte3-operacionais">
+        <h2>9. Parte 3 — Cadastros Operacionais (7 tabelas)</h2>
+
+        <table>
+          <thead>
+            <tr><th>Tabela</th><th>Função</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>item</code></td><td>Produto / Serviço</td></tr>
+            <tr><td><code>item_estoque</code></td><td>Estoque do item por unidade de negócio</td></tr>
+            <tr><td><code>tabela_preco_item</code></td><td>Preço do item em cada tabela</td></tr>
+            <tr><td><code>cliente</code></td><td>Cadastro de cliente final</td></tr>
+            <tr><td><code>cliente_conta_receber</code></td><td>Títulos em aberto</td></tr>
+            <tr><td><code>pedido</code></td><td>Pedido de venda ou orçamento</td></tr>
+            <tr><td><code>customizador_dados</code></td><td>Relatórios customizados</td></tr>
+          </tbody>
+        </table>
+
+        <h3>Arquivo SQL</h3>
+        <pre><code>~/Documents/&lt;PROJETO&gt;/sql/cadastros_operacionais.sql</code></pre>
+
+        <h3>Aplicar</h3>
+        <pre><code>psql -h localhost -U &lt;USUARIO_DB&gt; -d &lt;BANCO&gt; -f "~/Documents/&lt;PROJETO&gt;/sql/cadastros_operacionais.sql"</code></pre>
+
+        <h3>Validar</h3>
+        <pre><code>psql -h localhost -U &lt;USUARIO_DB&gt; -d &lt;BANCO&gt; -c "\dt"</code></pre>
+        <p>Total esperado após esta etapa: <strong>31 tabelas</strong>.</p>
+      </section>
+
+      <!-- ============ 10. PARTE 4 ============ -->
+      <section id="parte4-filhos">
+        <h2>10. Parte 4 — Tabelas Filho (31 tabelas)</h2>
+
+        <p>Tabelas de relacionamento N:N e tabelas dependentes. Principais grupos:</p>
+
+        <h3>Relacionamentos cliente × outros</h3>
+        <ul>
+          <li><code>cliente_endereco_adicional</code></li>
+          <li><code>cliente_representante</code></li>
+          <li><code>cliente_contato</code></li>
+          <li><code>cliente_tabela_preco</code></li>
+          <li><code>cliente_condicao_pagamento</code></li>
+          <li><code>cliente_forma_pagamento</code></li>
+          <li><code>cliente_imposto</code></li>
+          <li><code>cliente_campo_adicional</code></li>
+          <li><code>cliente_rota_simples</code></li>
+        </ul>
+
+        <h3>Relacionamentos item × outros</h3>
+        <ul>
+          <li><code>item_imposto</code></li>
+          <li><code>item_unidade_negocio</code></li>
+          <li><code>item_embalagem_venda</code></li>
+          <li><code>item_campo_adicional</code></li>
+        </ul>
+
+        <h3>Relacionamentos de representante</h3>
+        <ul>
+          <li><code>representante_tipo_venda</code></li>
+          <li><code>representante_supervisor</code></li>
+        </ul>
+
+        <h3>Relacionamentos de tabela de preço</h3>
+        <ul>
+          <li><code>tabela_preco_representante</code></li>
+          <li><code>tabela_preco_condicao_pagamento</code></li>
+          <li><code>tabela_preco_tipo_venda</code></li>
+          <li><code>tabela_preco_cliente</code></li>
+          <li><code>tabela_preco_grupo_cliente</code></li>
+          <li><code>tabela_preco_unidade_negocio</code></li>
+        </ul>
+
+        <h3>Relacionamentos de condição de pagamento</h3>
+        <ul>
+          <li><code>condicao_pagamento_forma</code></li>
+          <li><code>condicao_pagamento_unidade</code></li>
+          <li><code>condicao_pagamento_parcela</code></li>
+        </ul>
+
+        <h3>Relacionamentos de tipo de venda</h3>
+        <ul>
+          <li><code>tipo_venda_condicao_pagamento</code></li>
+          <li><code>tipo_venda_unidade_negocio</code></li>
+        </ul>
+
+        <h3>Outros</h3>
+        <ul>
+          <li><code>forma_pagamento_unidade_negocio</code></li>
+          <li><code>equipe_venda_categoria</code></li>
+          <li><code>equipe_venda_item</code></li>
+          <li><code>pedido_item</code></li>
+          <li><code>pedido_historico</code></li>
+        </ul>
+
+        <h3>Arquivo SQL</h3>
+        <pre><code>~/Documents/&lt;PROJETO&gt;/sql/tabelas_filho.sql</code></pre>
+
+        <h3>Aplicar</h3>
+        <pre><code>psql -h localhost -U &lt;USUARIO_DB&gt; -d &lt;BANCO&gt; -f "~/Documents/&lt;PROJETO&gt;/sql/tabelas_filho.sql"</code></pre>
+
+        <h3>Validar</h3>
+        <pre><code>psql -h localhost -U &lt;USUARIO_DB&gt; -d &lt;BANCO&gt; -c "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE';"</code></pre>
+        <p><strong>Total esperado após esta etapa: 62 tabelas.</strong></p>
+      </section>
+
+      <!-- ============ 11. PARTE 5 ============ -->
+      <section id="parte5-rls">
+        <h2>11. Parte 5 — Row-Level Security (RLS)</h2>
+
+        <p>Esta é a parte <strong>mais importante</strong> para segurança multi-tenant. Vamos ativar RLS em <strong>56 tabelas</strong>.</p>
+
+        <h3>Como funciona</h3>
+        <ol>
+          <li>A API autentica o usuário e descobre o <code>cod_tenant</code></li>
+          <li>A API executa <code>SET LOCAL app.cod_tenant = '1';</code> no início da transação</li>
+          <li>A partir daí, <strong>toda</strong> query nas tabelas com RLS filtra automaticamente</li>
+          <li>Mesmo se a API esquecer o <code>WHERE</code>, o banco filtra por ela</li>
+        </ol>
+
+        <h3>Arquivo SQL</h3>
+        <pre><code>~/Documents/&lt;PROJETO&gt;/sql/parte5_rls.sql</code></pre>
+
+        <h3>Aplicar</h3>
+        <pre><code>psql -h localhost -U &lt;USUARIO_DB&gt; -d &lt;BANCO&gt; -f "~/Documents/&lt;PROJETO&gt;/sql/parte5_rls.sql"</code></pre>
+
+        <h3>Como a API usa (exemplo)</h3>
+        <pre><code>BEGIN;
+SET LOCAL app.cod_tenant = '2';
+SET LOCAL app.cod_empresa = '1';   -- opcional
+SELECT * FROM cliente;              -- só clientes do tenant 2
+COMMIT;</code></pre>
+
+        <div class="callout success">
+          <strong>✅ Vantagens do RLS</strong>
+          <ul style="margin-top:6px">
+            <li>Isolamento provado em nível de banco</li>
+            <li>Bugs de código na API não vazam dados entre tenants</li>
+            <li>Auditoria e LGPD mais simples</li>
+          </ul>
+        </div>
+
+        <div class="callout warning">
+          <strong>⚠️ Detalhes importantes</strong>
+          <ul style="margin-top:6px">
+            <li>Superuser (<code>postgres</code>) <strong>ignora</strong> RLS — apenas o usuário da API (<code>epare</code>) respeita</li>
+            <li>Usamos <code>FORCE ROW LEVEL SECURITY</code> para que até o dono da tabela respeite o RLS</li>
+            <li>Sempre use <code>SET LOCAL</code> (não <code>SET</code>) dentro de transação — assim o contexto não vaza entre conexões do pool</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- ============ 12. TESTES ============ -->
+      <section id="testes">
+        <h2>12. Testes de Validação</h2>
+
+        <p>Depois de aplicar tudo, valide com os testes abaixo. Entre no psql:</p>
+        <pre><code>psql -h localhost -U &lt;USUARIO_DB&gt; -d &lt;BANCO&gt;</code></pre>
+
+        <h3>Teste 1 — Sem contexto (deve retornar vazio)</h3>
+        <pre><code>SELECT cod_tenant, codigo_erp, nome_razao_social FROM cliente;</code></pre>
+        <p>Esperado: <strong>0 linhas</strong>. Sem contexto definido, RLS bloqueia tudo.</p>
+
+        <h3>Teste 2 — Contexto do Tenant A</h3>
+        <pre><code>BEGIN;
+SET LOCAL app.cod_tenant = '2';
+SELECT cod_tenant, codigo_erp, nome_razao_social FROM cliente ORDER BY codigo_erp;
+COMMIT;</code></pre>
+        <p>Esperado: apenas clientes do <strong>tenant 2</strong> (ex: A001, A002).</p>
+
+        <h3>Teste 3 — Contexto do Tenant B</h3>
+        <pre><code>BEGIN;
+SET LOCAL app.cod_tenant = '3';
+SELECT cod_tenant, codigo_erp, nome_razao_social FROM cliente ORDER BY codigo_erp;
+COMMIT;</code></pre>
+        <p>Esperado: apenas clientes do <strong>tenant 3</strong> (ex: B001, B002).</p>
+
+        <h3>Teste 4 — Tentar burlar (deve dar erro)</h3>
+        <pre><code>BEGIN;
+SET LOCAL app.cod_tenant = '2';
+INSERT INTO cliente (cod_tenant, cod_empresa, codigo_erp, nome_razao_social, tipo_pessoa, ativo)
+VALUES (3, 1, 'HACK001', 'Tentativa de invasão', 'J', TRUE);
+COMMIT;</code></pre>
+        <p>Esperado: <span class="badge err">ERROR</span></p>
+        <pre><code>ERROR: new row violates row-level security policy for table "cliente"</code></pre>
+        <p>Isso prova que <strong>mesmo um bug na API não consegue inserir dados de outro tenant</strong>.</p>
+
+        <h3>Teste 5 — Inserir no tenant correto (deve funcionar)</h3>
+        <pre><code>BEGIN;
+SET LOCAL app.cod_tenant = '2';
+INSERT INTO cliente (cod_tenant, cod_empresa, codigo_erp, nome_razao_social, tipo_pessoa, ativo)
+VALUES (2, 1, 'A003', 'Cliente A3 (novo)', 'J', TRUE);
+COMMIT;</code></pre>
+        <p>Esperado: <code>INSERT 0 1</code> (sucesso).</p>
+
+        <div class="callout success">
+          <strong>✅ Todos os testes devem passar</strong>
+          Se algum falhar, verifique se o RLS foi aplicado corretamente e se o usuário do banco não é superuser.
+        </div>
+      </section>
+
+      <!-- ============ 13. BACKUP ============ -->
+      <section id="backup">
+        <h2>13. Backup Automático</h2>
+
+        <h3>Criar script de backup</h3>
+        <pre><code>mkdir -p ~/Documents/&lt;PROJETO&gt;/scripts
+nano ~/Documents/&lt;PROJETO&gt;/scripts/backup.sh</code></pre>
+
+        <p>Conteúdo:</p>
+        <pre><code>#!/bin/bash
+# ============================================================
+# Backup diário do banco VisionFlow
+# ============================================================
+
+set -e
+
+# Configurações
+BANCO="&lt;BANCO&gt;"
+USUARIO="&lt;USUARIO_DB&gt;"
+DESTINO="$HOME/Documents/&lt;PROJETO&gt;/backups"
+RETENCAO_DIAS=30
+DATA=$(date +%Y-%m-%d_%H-%M)
+
+# Cria diretório se não existir
+mkdir -p "$DESTINO"
+
+# Faz o dump e compacta
+echo "[$(date)] Iniciando backup de $BANCO..."
+pg_dump -h localhost -U "$USUARIO" "$BANCO" | gzip &gt; "$DESTINO/${BANCO}_${DATA}.sql.gz"
+
+# Remove backups antigos
+find "$DESTINO" -name "*.sql.gz" -mtime +$RETENCAO_DIAS -delete
+
+echo "[$(date)] Backup concluído: ${BANCO}_${DATA}.sql.gz"</code></pre>
+
+        <h3>Dar permissão e testar</h3>
+        <pre><code>chmod +x ~/Documents/&lt;PROJETO&gt;/scripts/backup.sh
+~/Documents/&lt;PROJETO&gt;/scripts/backup.sh</code></pre>
+
+        <h3>Automatizar com pgpass (sem senha explícita)</h3>
+        <pre><code>nano ~/.pgpass</code></pre>
+        <p>Conteúdo (troque pelos valores reais):</p>
+        <pre><code>localhost:5432:&lt;BANCO&gt;:&lt;USUARIO_DB&gt;:&lt;SENHA_FORTE&gt;</code></pre>
+        <p>Permissão obrigatória:</p>
+        <pre><code>chmod 600 ~/.pgpass</code></pre>
+
+        <h3>Agendar no cron</h3>
+        <pre><code>crontab -e</code></pre>
+        <p>Adicione (roda todo dia às 3h da manhã):</p>
+        <pre><code>0 3 * * * /home/&lt;USUARIO_LINUX&gt;/Documents/&lt;PROJETO&gt;/scripts/backup.sh &gt;&gt; /home/&lt;USUARIO_LINUX&gt;/Documents/&lt;PROJETO&gt;/logs/backup.log 2&gt;&amp;1</code></pre>
+
+        <div class="callout warning">
+          <strong>⚠️ Backups locais não bastam</strong>
+          Um backup no mesmo disco do banco não protege contra falha de hardware. Copie periodicamente para:
+          <ul style="margin-top:6px">
+            <li>HD externo</li>
+            <li>Nuvem (Google Drive, Dropbox, S3)</li>
+            <li>Outro servidor</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- ============ 14. TROUBLESHOOTING ============ -->
+      <section id="troubleshooting">
+        <h2>14. Troubleshooting</h2>
+
+        <h3>Erro: <code>peer authentication failed for user "postgres"</code></h3>
+        <p><strong>Causa:</strong> tentativa de conectar via TCP como usuário do sistema.</p>
+        <p><strong>Solução:</strong> use <code>sudo -u postgres psql</code> (não <code>psql -U postgres</code>) para conectar localmente.</p>
+
+        <h3>Erro: <code>password authentication failed for user "postgres"</code></h3>
+        <p><strong>Causa:</strong> o usuário <code>postgres</code> não tem senha definida (é o padrão no Ubuntu).</p>
+        <p><strong>Solução:</strong> definir uma senha:</p>
+        <pre><code>sudo -u postgres psql -c "ALTER USER postgres WITH PASSWORD '&lt;SENHA_FORTE&gt;';"</code></pre>
+
+        <h3>Erro: <code>must be owner of schema public</code></h3>
+        <p><strong>Causa:</strong> o schema <code>public</code> pertence ao <code>postgres</code>, não ao usuário da API.</p>
+        <p><strong>Solução:</strong></p>
+        <pre><code>sudo -u postgres psql -d &lt;BANCO&gt; -c "ALTER SCHEMA public OWNER TO &lt;USUARIO_DB&gt;;"
+sudo -u postgres psql -d &lt;BANCO&gt; -c "GRANT ALL ON SCHEMA public TO &lt;USUARIO_DB&gt;;"</code></pre>
+
+        <h3>Erro: <code>DROP DATABASE cannot run inside a transaction block</code></h3>
+        <p><strong>Causa:</strong> <code>DROP DATABASE</code> e <code>CREATE DATABASE</code> não rodam dentro de transação.</p>
+        <p><strong>Solução:</strong> ativar <em>Auto-commit</em> no pgAdmin, ou rodar cada comando separadamente via terminal:</p>
+        <pre><code>sudo -u postgres psql -c "DROP DATABASE IF EXISTS &lt;BANCO&gt;;"
+sudo -u postgres psql -c "CREATE DATABASE &lt;BANCO&gt; OWNER &lt;USUARIO_DB&gt;;"</code></pre>
+
+        <h3>Erro: <code>relation "X" does not exist</code></h3>
+        <p><strong>Causa:</strong> o SQL da parte ainda não foi aplicado, ou você está conectado em banco errado.</p>
+        <p><strong>Solução:</strong> confirme com <code>\dt</code> e reaplique a parte faltante.</p>
+
+        <h3>RLS não está filtrando</h3>
+        <p><strong>Causa:</strong> você está conectado como superuser (<code>postgres</code>) — superuser ignora RLS.</p>
+        <p><strong>Solução:</strong> conecte como o usuário da API (<code>epare</code>).</p>
+
+        <h3>Pager do psql está atrapalhando</h3>
+        <p><strong>Solução:</strong> dentro do psql, <code>\pset pager off</code>. Ou crie <code>~/.psqlrc</code> com essa linha.</p>
+      </section>
+
+      <!-- ============ 15. RECRIAR ============ -->
+      <section id="recriar">
+        <h2>15. Como Recriar do Zero</h2>
+        <p>Se um dia precisar reconstruir o ambiente, siga esta sequência exata:</p>
+
+        <h3>1. Remover banco antigo (opcional)</h3>
+        <pre><code>sudo -u postgres psql -c "DROP DATABASE IF EXISTS &lt;BANCO&gt;;"</code></pre>
+
+        <h3>2. Criar banco novo</h3>
+        <pre><code>sudo -u postgres psql -c "CREATE DATABASE &lt;BANCO&gt; OWNER &lt;USUARIO_DB&gt; ENCODING 'UTF8' TEMPLATE template0;"</code></pre>
+
+        <h3>3. Ajustar schema</h3>
+        <pre><code>sudo -u postgres psql -d &lt;BANCO&gt; -c "ALTER SCHEMA public OWNER TO &lt;USUARIO_DB&gt;;"
+sudo -u postgres psql -d &lt;BANCO&gt; -c "GRANT ALL ON SCHEMA public TO &lt;USUARIO_DB&gt;;"</code></pre>
+
+        <h3>4. Aplicar as 5 partes em ordem</h3>
+        <pre><code>cd ~/Documents/&lt;PROJETO&gt;/sql
+
+psql -h localhost -U &lt;USUARIO_DB&gt; -d &lt;BANCO&gt; -f nucleo_saas.sql
+psql -h localhost -U &lt;USUARIO_DB&gt; -d &lt;BANCO&gt; -f cadastros_base.sql
+psql -h localhost -U &lt;USUARIO_DB&gt; -d &lt;BANCO&gt; -f cadastros_operacionais.sql
+psql -h localhost -U &lt;USUARIO_DB&gt; -d &lt;BANCO&gt; -f tabelas_filho.sql
+psql -h localhost -U &lt;USUARIO_DB&gt; -d &lt;BANCO&gt; -f parte5_rls.sql</code></pre>
+
+        <h3>5. Validar</h3>
+        <pre><code>psql -h localhost -U &lt;USUARIO_DB&gt; -d &lt;BANCO&gt; -c "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE';"</code></pre>
+        <p>Esperado: <strong>62</strong>.</p>
+
+        <h3>6. Rodar os testes de RLS</h3>
+        <p>Veja seção <a href="#testes">Testes de Validação</a>.</p>
+
+        <div class="callout success">
+          <strong>✅ Sucesso</strong>
+          Se todas as 5 partes aplicaram sem erro e os testes de RLS passaram, o ambiente está pronto para receber a API.
+        </div>
+      </section>
+
+      <!-- ============ 16. GLOSSÁRIO ============ -->
+      <section id="glossario">
+        <h2>16. Glossário</h2>
+
+        <table>
+          <thead>
+            <tr><th>Termo</th><th>Significado</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Tenant</strong></td>
+              <td>Termo em inglês para &quot;inquilino&quot;. No SaaS, é quem <strong>te paga</strong> a assinatura. Ex: &quot;Distribuidora João&quot;.</td>
+            </tr>
+            <tr>
+              <td><strong>Revendedor</strong></td>
+              <td>Software house que revende o sistema com marca própria (white label). Ex: &quot;Sistema do Zé&quot; (que é cliente seu).</td>
+            </tr>
+            <tr>
+              <td><strong>White Label</strong></td>
+              <td>Produto feito por uma empresa mas vendido com marca de outra. Ex: seu sistema rebrandado pelo revendedor.</td>
+            </tr>
+            <tr>
+              <td><strong>Multi-tenant</strong></td>
+              <td>Arquitetura onde vários clientes (tenants) compartilham a mesma base de dados, mas com isolamento lógico.</td>
+            </tr>
+            <tr>
+              <td><strong>Row-Level Security (RLS)</strong></td>
+              <td>Recurso do PostgreSQL que filtra linhas automaticamente baseado em política definida.</td>
+            </tr>
+            <tr>
+              <td><strong>codigo_erp</strong></td>
+              <td>Código de um registro no ERP do cliente. Serve para casar os dados entre a nossa base e o ERP dele.</td>
+            </tr>
+            <tr>
+              <td><strong>slug</strong></td>
+              <td>Identificador amigável para URL (ex: <code>distribuidora-joao</code> em vez de <code>tenant-42</code>).</td>
+            </tr>
+            <tr>
+              <td><strong>Firebird</strong></td>
+              <td>Banco de dados usado pelo ERP do cliente. É onde os dados originais vivem.</td>
+            </tr>
+            <tr>
+              <td><strong>pg_dump</strong></td>
+              <td>Ferramenta do PostgreSQL para gerar backup lógico (arquivo .sql com todos os dados).</td>
+            </tr>
+            <tr>
+              <td><strong>SET LOCAL</strong></td>
+              <td>Comando SQL para definir uma variável de sessão que dura apenas até o final da transação.</td>
+            </tr>
+            <tr>
+              <td><strong>Trigger</strong></td>
+              <td>Função executada automaticamente pelo banco quando um evento (INSERT/UPDATE/DELETE) acontece.</td>
+            </tr>
+            <tr>
+              <td><strong>Policy (RLS)</strong></td>
+              <td>Regra que define quais linhas são visíveis/editáveis para cada usuário em uma tabela com RLS.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+    </main>
+  </div>
+
+  <footer>
+    <p>VisionFlow API — Manual de Instalação da Infraestrutura</p>
+    <p style="margin-top: 8px; font-size: 0.85rem;">
+      Documento gerado e mantido pelo time de desenvolvimento.<br>
+      Para sugestões ou correções, abra um <em>issue</em> no repositório do projeto.
+    </p>
+  </footer>
+</div>
+
+<script>
+  // Data da última atualização (auto-preenchida)
+  document.getElementById('data').textContent =
+    new Date().toLocaleDateString('pt-BR', {
+      day: '2-digit',
+      month: 'long',
+      year: 'numeric'
+    });
+</script>
+
+</body>
+</html>
