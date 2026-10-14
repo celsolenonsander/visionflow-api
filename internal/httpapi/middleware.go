@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/celsolenonsander/visionflow-api/internal/logger"
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/golang-jwt/jwt/v5"
 )
 
@@ -37,21 +38,21 @@ func LoggingMiddleware(log *logger.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
+			ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
 
-			writer := &statusResponseWriter{
-				ResponseWriter: w,
+			next.ServeHTTP(ww, r)
+
+			tenant := TenantFromContext(r.Context())
+			if tenant == "" {
+				tenant = "-"
 			}
 
-			next.ServeHTTP(writer, r)
-
-			duration := time.Since(start)
-
-			log.Printf(
-				"%s %s %d %s",
+			log.Printf("%s %s %d %s tenant=%s",
 				r.Method,
 				r.URL.Path,
-				writer.status,
-				duration,
+				ww.Status(),
+				time.Since(start),
+				tenant,
 			)
 		})
 	}

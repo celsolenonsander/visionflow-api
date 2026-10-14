@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"net/http"
 	"os"
 	"strings"
@@ -10,6 +11,76 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
 )
+
+// Chave usada para guardar o tenant no context da request.
+type ctxKey string
+
+const (
+	ctxKeyTenant     ctxKey = "tenant"      // subdomínio do tenant (ex: "cliente1")
+	ctxKeyTenantHost ctxKey = "tenant_host" // host completo (ex: "cliente1.programadordelphi.com.br")
+)
+
+// TenantFromContext devolve o subdomínio do tenant associado à request.
+// Retorna string vazia se não houver tenant (ex: chamadas diretas ao api.*).
+func TenantFromContext(ctx context.Context) string {
+	if v, ok := ctx.Value(ctxKeyTenant).(string); ok {
+		return v
+	}
+	return ""
+}
+
+// TenantHostFromContext devolve o host completo associado à request.
+func TenantHostFromContext(ctx context.Context) string {
+	if v, ok := ctx.Value(ctxKeyTenantHost).(string); ok {
+		return v
+	}
+	return ""
+}
+
+// TenantMiddleware identifica o tenant a partir do Host da request.
+//
+// Ordem de precedência para descobrir o host:
+//  1. Header X-Tenant-Host (injetado pelo Cloudflare Worker ao repassar
+//     a request para api.programadordelphi.com.br)
+//  2. Header X-Forwarded-Host (proxies reversos)
+//  3. r.Host (padrão)
+//
+// O subdomínio é a primeira label do host, exceto quando for "www" ou "api",
+// que não representam tenants e portanto são ignorados.
+func TenantMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		host := r.Header.Get("X-Tenant-Host")
+		if host == "" {
+			host = r.Header.Get("X-Forwarded-Host")
+		}
+		if host == "" {
+			host = r.Host
+		}
+
+		// Remove porta, se houver.
+		if i := strings.Index(host, ":"); i != -1 {
+			host = host[:i]
+		}
+		host = strings.ToLower(strings.TrimSpace(host))
+
+		subdomain := ""
+		if host != "" {
+			parts := strings.Split(host, ".")
+			if len(parts) > 0 {
+				first := parts[0]
+				// www e api não são tenants.
+				if first != "www" && first != "api" && first != "localhost" {
+					subdomain = first
+				}
+			}
+		}
+
+		ctx := context.WithValue(r.Context(), ctxKeyTenant, subdomain)
+		ctx = context.WithValue(ctx, ctxKeyTenantHost, host)
+
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
 
 func Routes(h *Handler, secret string, log *logger.Logger) http.Handler {
 	r := chi.NewRouter()
@@ -26,6 +97,8 @@ func Routes(h *Handler, secret string, log *logger.Logger) http.Handler {
 			"Authorization",
 			"Content-Type",
 			"X-CSRF-Token",
+			"X-Tenant-Host",
+			"X-Forwarded-Host",
 			"Origin",
 		},
 		ExposedHeaders:   []string{"Link"},
@@ -33,6 +106,9 @@ func Routes(h *Handler, secret string, log *logger.Logger) http.Handler {
 		MaxAge:           300,
 	}))
 
+	// Tenant precisa vir ANTES do Logging para que o log já
+	// consiga enxergar o tenant no contexto.
+	r.Use(TenantMiddleware)
 	r.Use(LoggingMiddleware(log))
 
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
@@ -211,6 +287,18 @@ func Routes(h *Handler, secret string, log *logger.Logger) http.Handler {
 		writeJSON(w, 200, map[string]string{"status": "ok"}, nil)
 	})
 
+	// Debug temporário: mostra o que o middleware conseguiu extrair.
+	// Remova em produção ou proteja com token.
+	r.Get("/debug/host", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, 200, map[string]any{
+			"host_header":      r.Host,
+			"x_tenant_host":    r.Header.Get("X-Tenant-Host"),
+			"x_forwarded_host": r.Header.Get("X-Forwarded-Host"),
+			"tenant":           TenantFromContext(r.Context()),
+			"tenant_host":      TenantHostFromContext(r.Context()),
+		}, nil)
+	})
+
 	r.Get("/swagger.yaml", swaggerYAML)
 	r.Get("/swagger/index.html", swaggerUI)
 
@@ -268,8 +356,7 @@ func allowedOrigins() []string {
 	return []string{
 		"http://localhost:5173",
 		"https://visionflow.celsolsander.workers.dev",
-		// Adicione aqui o domínio custom quando configurar:
-		// "https://visionflow.programadordelphi.com.br",
+		"https://app.programadordelphi.com.br",
 	}
 }
 
