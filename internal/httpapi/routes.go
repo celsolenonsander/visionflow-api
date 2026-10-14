@@ -2,14 +2,36 @@ package httpapi
 
 import (
 	"net/http"
+	"os"
+	"strings"
 
 	"github.com/celsolenonsander/visionflow-api/internal/logger"
 	"github.com/celsolenonsander/visionflow-api/internal/service"
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/cors"
 )
 
 func Routes(h *Handler, secret string, log *logger.Logger) http.Handler {
 	r := chi.NewRouter()
+
+	// CORS precisa vir ANTES de qualquer outra coisa para responder
+	// ao preflight OPTIONS antes do roteador chi devolver 405.
+	r.Use(cors.Handler(cors.Options{
+		AllowedOrigins: allowedOrigins(),
+		AllowedMethods: []string{
+			"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS",
+		},
+		AllowedHeaders: []string{
+			"Accept",
+			"Authorization",
+			"Content-Type",
+			"X-CSRF-Token",
+			"Origin",
+		},
+		ExposedHeaders:   []string{"Link"},
+		AllowCredentials: false,
+		MaxAge:           300,
+	}))
 
 	r.Use(LoggingMiddleware(log))
 
@@ -220,6 +242,35 @@ func Routes(h *Handler, secret string, log *logger.Logger) http.Handler {
 	})
 
 	return r
+}
+
+// allowedOrigins devolve a lista de origens permitidas para CORS.
+//
+// Lê da variável de ambiente CORS_ALLOWED_ORIGINS (separada por vírgula).
+// Se a variável não estiver definida, usa um fallback com os domínios
+// de desenvolvimento e produção do front VisionFlow.
+func allowedOrigins() []string {
+	raw := strings.TrimSpace(os.Getenv("CORS_ALLOWED_ORIGINS"))
+	if raw != "" {
+		parts := strings.Split(raw, ",")
+		origins := make([]string, 0, len(parts))
+		for _, p := range parts {
+			p = strings.TrimSpace(p)
+			if p != "" {
+				origins = append(origins, p)
+			}
+		}
+		if len(origins) > 0 {
+			return origins
+		}
+	}
+
+	return []string{
+		"http://localhost:5173",
+		"https://visionflow.celsolsander.workers.dev",
+		// Adicione aqui o domínio custom quando configurar:
+		// "https://visionflow.programadordelphi.com.br",
+	}
 }
 
 var _ = service.New
