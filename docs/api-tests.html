@@ -1,0 +1,1037 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VisionFlow API — Testes Automatizados</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #0d1117;
+            color: #c9d1d9;
+            line-height: 1.6;
+            padding: 24px;
+        }
+
+        .container { max-width: 1200px; margin: 0 auto; }
+
+        header {
+            border-bottom: 2px solid #30363d;
+            padding-bottom: 16px;
+            margin-bottom: 24px;
+        }
+
+        h1 { font-size: 24px; color: #f0f6fc; margin-bottom: 4px; }
+        .subtitle { color: #8b949e; font-size: 13px; }
+
+        .controls {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 20px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .controls label {
+            font-size: 13px;
+            color: #8b949e;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        input[type="text"], input[type="password"] {
+            background: #0d1117;
+            border: 1px solid #30363d;
+            color: #c9d1d9;
+            padding: 6px 10px;
+            border-radius: 6px;
+            font-family: monospace;
+            font-size: 13px;
+            width: 240px;
+        }
+
+        input:focus { outline: none; border-color: #58a6ff; }
+
+        button {
+            background: #238636;
+            color: #fff;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-weight: 600;
+            font-size: 13px;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+
+        button:hover { background: #2ea043; }
+        button:disabled { background: #484f58; cursor: not-allowed; }
+        button.secondary { background: #21262d; border: 1px solid #30363d; }
+        button.secondary:hover { background: #30363d; }
+
+        .progress-bar {
+            width: 100%;
+            height: 4px;
+            background: #21262d;
+            border-radius: 2px;
+            overflow: hidden;
+            margin-bottom: 20px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: #58a6ff;
+            width: 0%;
+            transition: width 0.3s;
+        }
+
+        .summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+
+        .stat {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: 16px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 28px;
+            font-weight: 700;
+            color: #f0f6fc;
+        }
+
+        .stat-label {
+            font-size: 11px;
+            color: #8b949e;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-top: 4px;
+        }
+
+        .stat.ok .stat-value { color: #3fb950; }
+        .stat.err .stat-value { color: #f85149; }
+        .stat.info .stat-value { color: #58a6ff; }
+
+        .group {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            overflow: hidden;
+        }
+
+        .group-header {
+            padding: 12px 16px;
+            background: #1c2128;
+            border-bottom: 1px solid #30363d;
+            font-weight: 600;
+            font-size: 14px;
+            color: #f0f6fc;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .group-stats {
+            font-size: 12px;
+            color: #8b949e;
+            font-weight: normal;
+        }
+
+        .test {
+            padding: 12px 16px;
+            border-bottom: 1px solid #21262d;
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            font-size: 13px;
+        }
+
+        .test:last-child { border-bottom: none; }
+
+        .test-icon {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: bold;
+            flex-shrink: 0;
+            margin-top: 2px;
+        }
+
+        .test-icon.ok { background: #238636; color: #fff; }
+        .test-icon.err { background: #da3633; color: #fff; }
+        .test-icon.run { background: #1f6feb; color: #fff; }
+        .test-icon.skip { background: #484f58; color: #fff; }
+
+        .test-body { flex: 1; min-width: 0; }
+
+        .test-name {
+            color: #f0f6fc;
+            font-weight: 500;
+            margin-bottom: 4px;
+        }
+
+        .test-meta {
+            color: #8b949e;
+            font-size: 12px;
+            font-family: monospace;
+            word-break: break-all;
+        }
+
+        .test-error {
+            color: #f85149;
+            font-size: 12px;
+            font-family: monospace;
+            margin-top: 6px;
+            padding: 8px;
+            background: #1c0d0d;
+            border-left: 3px solid #f85149;
+            border-radius: 4px;
+            white-space: pre-wrap;
+        }
+
+        .test-response {
+            color: #8b949e;
+            font-size: 11px;
+            font-family: monospace;
+            margin-top: 6px;
+            padding: 8px;
+            background: #0d1117;
+            border-radius: 4px;
+            max-height: 100px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+
+        .log {
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: 16px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+            margin-top: 20px;
+            white-space: pre-wrap;
+            line-height: 1.5;
+        }
+
+        .log-line { margin-bottom: 2px; }
+        .log-line.info { color: #58a6ff; }
+        .log-line.ok { color: #3fb950; }
+        .log-line.err { color: #f85149; }
+        .log-line.dim { color: #6e7681; }
+
+        .token-preview {
+            font-family: monospace;
+            font-size: 11px;
+            color: #8b949e;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .badge.get { background: #1f6feb; color: #fff; }
+        .badge.post { background: #238636; color: #fff; }
+        .badge.put { background: #9e6a03; color: #fff; }
+        .badge.delete { background: #da3633; color: #fff; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🧪 VisionFlow API — Testes Automatizados</h1>
+            <div class="subtitle">Suite completa de validação end-to-end</div>
+        </header>
+
+        <div class="controls">
+            <label>
+                API URL:
+                <input type="text" id="apiUrl" value="http://localhost:8080">
+            </label>
+            <label>
+                Email:
+                <input type="text" id="email" value="admin@epare.com.br">
+            </label>
+            <label>
+                Senha:
+                <input type="password" id="password" value="123456">
+            </label>
+            <button id="runBtn" onclick="runAll()">▶ Rodar todos os testes</button>
+            <button class="secondary" onclick="clearResults()">Limpar</button>
+            <button class="secondary" onclick="exportReport()">📄 Exportar</button>
+        </div>
+
+        <div class="progress-bar">
+            <div class="progress-fill" id="progress"></div>
+        </div>
+
+        <div class="summary" id="summary" style="display: none;">
+            <div class="stat">
+                <div class="stat-value" id="statTotal">0</div>
+                <div class="stat-label">Total</div>
+            </div>
+            <div class="stat ok">
+                <div class="stat-value" id="statOk">0</div>
+                <div class="stat-label">Passou</div>
+            </div>
+            <div class="stat err">
+                <div class="stat-value" id="statErr">0</div>
+                <div class="stat-label">Falhou</div>
+            </div>
+            <div class="stat info">
+                <div class="stat-value" id="statTime">0s</div>
+                <div class="stat-label">Tempo</div>
+            </div>
+        </div>
+
+        <div id="results"></div>
+
+        <div class="log" id="log" style="display: none;"></div>
+    </div>
+
+    <script>
+        // ═══════════════════════════════════════════════════════════
+        // ESTADO GLOBAL
+        // ═══════════════════════════════════════════════════════════
+
+        const state = {
+            running: false,
+            token: null,
+            tokenUser3: null,
+            results: [],
+            startTime: 0,
+            clientId: null,
+            enderecoId: null,
+            pedidoId: null,
+            agendaId: null,
+            tarefaId: null,
+        };
+
+        // ═══════════════════════════════════════════════════════════
+        // HELPERS
+        // ═══════════════════════════════════════════════════════════
+
+        function log(msg, type = 'info') {
+            const logEl = document.getElementById('log');
+            logEl.style.display = 'block';
+            const line = document.createElement('div');
+            line.className = `log-line ${type}`;
+            line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            logEl.appendChild(line);
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+
+        function apiUrl() {
+            return document.getElementById('apiUrl').value.replace(/\/$/, '');
+        }
+
+        async function api(method, path, body = null, token = null) {
+            const headers = {
+                'Content-Type': 'application/json',
+            };
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+            }
+
+            const opts = { method, headers };
+            if (body) {
+                opts.body = JSON.stringify(body);
+            }
+
+            const res = await fetch(`${apiUrl()}${path}`, opts);
+            const text = await res.text();
+            let data = null;
+            try {
+                data = text ? JSON.parse(text) : null;
+            } catch (e) {
+                data = text;
+            }
+
+            return { status: res.status, ok: res.ok, data };
+        }
+
+        function addTest(group, name, method, path, passed, status, error = null, response = null) {
+            state.results.push({
+                group, name, method, path, passed, status, error, response,
+            });
+            renderResults();
+        }
+
+        // ═══════════════════════════════════════════════════════════
+        // RUNNER
+        // ═══════════════════════════════════════════════════════════
+
+        async function runAll() {
+            if (state.running) return;
+
+            state.running = true;
+            state.results = [];
+            state.startTime = Date.now();
+            state.token = null;
+            state.tokenUser3 = null;
+            state.clientId = null;
+            state.enderecoId = null;
+            state.pedidoId = null;
+            state.agendaId = null;
+            state.tarefaId = null;
+
+            document.getElementById('runBtn').disabled = true;
+            document.getElementById('results').innerHTML = '';
+            document.getElementById('log').innerHTML = '';
+            document.getElementById('summary').style.display = 'none';
+
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+
+            log('🚀 Iniciando suite de testes', 'info');
+            log(`   API: ${apiUrl()}`, 'dim');
+            log('');
+
+            // ═══ HEALTH ═══
+            await testHealth();
+
+            // ═══ LOGIN ═══
+            await testLogin(email, password);
+
+            if (!state.token) {
+                log('❌ Login falhou. Abortando testes.', 'err');
+                finish();
+                return;
+            }
+
+            // ═══ LOGIN USER 3 ═══
+            await testLoginUser3();
+
+            // ═══ AUTH ═══
+            await testAuthErrors();
+
+            // ═══ CLIENTES (READ) ═══
+            await testClientesRead();
+
+            // ═══ CLIENTES (WRITE) ═══
+            await testClientesWrite();
+
+            // ═══ ENDEREÇOS ═══
+            await testEnderecos();
+
+            // ═══ CONTAS A RECEBER ═══
+            await testContasReceber();
+
+            // ═══ PEDIDOS ═══
+            await testPedidos();
+
+            // ═══ CATÁLOGOS ═══
+            await testCatalogos();
+
+            // ═══ AGENDA E TAREFAS ═══
+            await testAgendaTarefas();
+
+            // ═══ SHELL, HOME, NOTIFICAÇÕES ═══
+            await testShellHomeNotif();
+
+            finish();
+        }
+
+        // ═══ HEALTH ═══
+
+        async function testHealth() {
+            log('📋 Testando /health...', 'info');
+            try {
+                const { status, ok, data } = await api('GET', '/health');
+                addTest('Health', 'GET /health', 'GET', '/health', ok && data?.status === 'ok', status);
+                if (ok) log('   ✅ /health OK', 'ok');
+            } catch (e) {
+                addTest('Health', 'GET /health', 'GET', '/health', false, 0, e.message);
+                log(`   ❌ /health: ${e.message}`, 'err');
+            }
+        }
+
+        // ═══ LOGIN ═══
+
+        async function testLogin(email, password) {
+            log('📋 Testando login...', 'info');
+            try {
+                const { status, ok, data } = await api('POST', '/auth/login', { email, senha: password });
+                const hasToken = data?.data?.usuario?.token;
+                if (ok && hasToken) {
+                    state.token = hasToken;
+                    addTest('Auth', 'POST /auth/login (sucesso)', 'POST', '/auth/login', true, status);
+                    log(`   ✅ Login OK — token: ${state.token.slice(0, 30)}...`, 'ok');
+                } else {
+                    addTest('Auth', 'POST /auth/login (sucesso)', 'POST', '/auth/login', false, status, data?.error?.message || 'sem token');
+                    log(`   ❌ Login falhou: ${data?.error?.message}`, 'err');
+                }
+            } catch (e) {
+                addTest('Auth', 'POST /auth/login (sucesso)', 'POST', '/auth/login', false, 0, e.message);
+                log(`   ❌ Login: ${e.message}`, 'err');
+            }
+        }
+
+        async function testLoginUser3() {
+            log('📋 Testando login user 3 (tenant 4)...', 'info');
+            try {
+                const { status, ok, data } = await api('POST', '/auth/login', {
+                    email: 'joao.silva@saajoao.com.br',
+                    senha: '123456',
+                });
+                if (ok && data?.data?.usuario?.token) {
+                    state.tokenUser3 = data.data.usuario.token;
+                    addTest('Auth', 'POST /auth/login (user 3)', 'POST', '/auth/login', true, status);
+                    log('   ✅ Login user 3 OK', 'ok');
+                } else {
+                    addTest('Auth', 'POST /auth/login (user 3)', 'POST', '/auth/login', false, status, 'falhou');
+                    log('   ⚠️ User 3 não conseguiu logar (talvez senha diferente)', 'err');
+                }
+            } catch (e) {
+                addTest('Auth', 'POST /auth/login (user 3)', 'POST', '/auth/login', false, 0, e.message);
+            }
+        }
+
+        // ═══ AUTH ERRORS ═══
+
+        async function testAuthErrors() {
+            log('📋 Testando erros de auth...', 'info');
+
+            // Sem token
+            try {
+                const { status, ok } = await api('GET', '/clientes');
+                addTest('Auth', 'GET /clientes (sem token)', 'GET', '/clientes', status === 401, status);
+                log(`   ${status === 401 ? '✅' : '❌'} Sem token → ${status}`, status === 401 ? 'ok' : 'err');
+            } catch (e) {
+                addTest('Auth', 'GET /clientes (sem token)', 'GET', '/clientes', false, 0, e.message);
+            }
+
+            // Token inválido
+            try {
+                const { status } = await api('GET', '/clientes', null, 'token_invalido_xxx');
+                addTest('Auth', 'GET /clientes (token inválido)', 'GET', '/clientes', status === 401, status);
+                log(`   ${status === 401 ? '✅' : '❌'} Token inválido → ${status}`, status === 401 ? 'ok' : 'err');
+            } catch (e) {
+                addTest('Auth', 'GET /clientes (token inválido)', 'GET', '/clientes', false, 0, e.message);
+            }
+        }
+
+        // ═══ CLIENTES READ ═══
+
+        async function testClientesRead() {
+            log('📋 Testando leitura de clientes...', 'info');
+
+            // Listar
+            try {
+                const { status, ok, data } = await api('GET', '/clientes', null, state.token);
+                const items = data?.data?.items;
+                const hasCursor = 'nextCursor' in (data?.data || {});
+                addTest('Clientes', 'GET /clientes', 'GET', '/clientes', ok && Array.isArray(items) && hasCursor, status);
+                log(`   ${ok ? '✅' : '❌'} Listagem → ${status} (${items?.length ?? 0} itens)`, ok ? 'ok' : 'err');
+            } catch (e) {
+                addTest('Clientes', 'GET /clientes', 'GET', '/clientes', false, 0, e.message);
+            }
+
+            // Filtro status
+            try {
+                const { status, ok } = await api('GET', '/clientes?status=ativo', null, state.token);
+                addTest('Clientes', 'GET /clientes?status=ativo', 'GET', '/clientes', ok, status);
+                log(`   ${ok ? '✅' : '❌'} Filtro status → ${status}`, ok ? 'ok' : 'err');
+            } catch (e) {
+                addTest('Clientes', 'GET /clientes?status=ativo', 'GET', '/clientes', false, 0, e.message);
+            }
+
+            // Filtro busca
+            try {
+                const { status, ok } = await api('GET', '/clientes?busca=teste', null, state.token);
+                addTest('Clientes', 'GET /clientes?busca=teste', 'GET', '/clientes', ok, status);
+                log(`   ${ok ? '✅' : '❌'} Filtro busca → ${status}`, ok ? 'ok' : 'err');
+            } catch (e) {
+                addTest('Clientes', 'GET /clientes?busca=teste', 'GET', '/clientes', false, 0, e.message);
+            }
+
+            // Buscar por ID (pega o primeiro)
+            try {
+                const listRes = await api('GET', '/clientes?limit=1', null, state.token);
+                const firstId = listRes.data?.data?.items?.[0]?.id;
+                if (firstId) {
+                    const { status, ok } = await api('GET', `/clientes/${firstId}`, null, state.token);
+                    addTest('Clientes', `GET /clientes/${firstId}`, 'GET', `/clientes/${firstId}`, ok, status);
+                    log(`   ${ok ? '✅' : '❌'} Detalhe cliente → ${status}`, ok ? 'ok' : 'err');
+                } else {
+                    addTest('Clientes', 'GET /clientes/{id}', 'GET', '/clientes/{id}', false, 0, 'sem clientes');
+                }
+            } catch (e) {
+                addTest('Clientes', 'GET /clientes/{id}', 'GET', '/clientes/{id}', false, 0, e.message);
+            }
+        }
+
+        // ═══ CLIENTES WRITE ═══
+
+        async function testClientesWrite() {
+            log('📋 Testando escrita de clientes...', 'info');
+
+            const ts = Date.now();
+
+            // Criar
+            try {
+                const body = {
+                    nome_razao_social: `Teste Suite ${ts}`,
+                    tipo_pessoa: 'PJ',
+                };
+                const { status, ok, data } = await api('POST', '/clientes', body, state.token);
+                if ((status === 201 || ok) && data?.data?.id) {
+                    state.clientId = data.data.id;
+                    addTest('Clientes', 'POST /clientes', 'POST', '/clientes', true, status);
+                    log(`   ✅ Criado cliente id=${state.clientId}`, 'ok');
+                } else {
+                    addTest('Clientes', 'POST /clientes', 'POST', '/clientes', false, status, data?.error?.message || 'falhou');
+                    log(`   ❌ Criar cliente → ${status}`, 'err');
+                }
+            } catch (e) {
+                addTest('Clientes', 'POST /clientes', 'POST', '/clientes', false, 0, e.message);
+            }
+
+            if (!state.clientId) {
+                addTest('Clientes', 'PUT /clientes/{id}', 'PUT', '/clientes/{id}', false, 0, 'sem clientId');
+                addTest('Clientes', 'DELETE /clientes/{id}', 'DELETE', '/clientes/{id}', false, 0, 'sem clientId');
+                return;
+            }
+
+            // Editar
+            try {
+                const { status, ok, data } = await api('PUT', `/clientes/${state.clientId}`, {
+                    nome_razao_social: `Teste Suite ${ts} (editado)`,
+                    tipo_pessoa: 'PJ',
+                }, state.token);
+                const nome = data?.data?.nome_razao_social;
+                addTest('Clientes', 'PUT /clientes/{id}', 'PUT', `/clientes/${state.clientId}`, ok && nome?.includes('editado'), status);
+                log(`   ${ok ? '✅' : '❌'} Editar cliente → ${status}`, ok ? 'ok' : 'err');
+            } catch (e) {
+                addTest('Clientes', 'PUT /clientes/{id}', 'PUT', `/clientes/${state.clientId}`, false, 0, e.message);
+            }
+
+            // Deletar (soft)
+            try {
+                const { status, ok, data } = await api('DELETE', `/clientes/${state.clientId}`, null, state.token);
+                addTest('Clientes', 'DELETE /clientes/{id}', 'DELETE', `/clientes/${state.clientId}`, ok, status);
+                log(`   ${ok ? '✅' : '❌'} Deletar cliente → ${status}`, ok ? 'ok' : 'err');
+            } catch (e) {
+                addTest('Clientes', 'DELETE /clientes/{id}', 'DELETE', `/clientes/${state.clientId}`, false, 0, e.message);
+            }
+
+            // Confirmar 404 após soft delete
+            try {
+                const { status } = await api('GET', `/clientes/${state.clientId}`, null, state.token);
+                addTest('Clientes', 'GET cliente deletado (404)', 'GET', `/clientes/${state.clientId}`, status === 404, status);
+                log(`   ${status === 404 ? '✅' : '❌'} Cliente deletado → ${status}`, status === 404 ? 'ok' : 'err');
+            } catch (e) {
+                addTest('Clientes', 'GET cliente deletado (404)', 'GET', `/clientes/${state.clientId}`, false, 0, e.message);
+            }
+        }
+
+        // ═══ ENDEREÇOS ═══
+
+        async function testEnderecos() {
+            log('📋 Testando endereços...', 'info');
+
+            // Pega o primeiro cliente
+            const listRes = await api('GET', '/clientes?limit=1', null, state.token);
+            const clienteId = listRes.data?.data?.items?.[0]?.id;
+            if (!clienteId) {
+                addTest('Endereços', 'POST /clientes/{id}/enderecos', 'POST', '/clientes/{id}/enderecos', false, 0, 'sem cliente');
+                return;
+            }
+
+            // Listar
+            try {
+                const { status, ok } = await api('GET', `/clientes/${clienteId}/enderecos`, null, state.token);
+                addTest('Endereços', `GET /clientes/${clienteId}/enderecos`, 'GET', `/clientes/${clienteId}/enderecos`, ok, status);
+                log(`   ${ok ? '✅' : '❌'} Listar endereços → ${status}`, ok ? 'ok' : 'err');
+            } catch (e) {
+                addTest('Endereços', `GET /clientes/${clienteId}/enderecos`, 'GET', `/clientes/${clienteId}/enderecos`, false, 0, e.message);
+            }
+
+            // Criar
+            try {
+                const { status, ok, data } = await api('POST', `/clientes/${clienteId}/enderecos`, {
+                    tipo_endereco: 'E',
+                    cep: '01310100',
+                    logradouro: 'Avenida Paulista',
+                    numero_endereco: '1000',
+                    bairro: 'Bela Vista',
+                    cidade: 'São Paulo',
+                    estado: 'SP',
+                }, state.token);
+                if (ok && data?.data?.id) {
+                    state.enderecoId = data.data.id;
+                    addTest('Endereços', 'POST /clientes/{id}/enderecos', 'POST', `/clientes/${clienteId}/enderecos`, true, status);
+                    log(`   ✅ Endereço criado id=${state.enderecoId}`, 'ok');
+                } else {
+                    addTest('Endereços', 'POST /clientes/{id}/enderecos', 'POST', `/clientes/${clienteId}/enderecos`, false, status, data?.error?.message);
+                    log(`   ❌ Criar endereço → ${status}`, 'err');
+                }
+            } catch (e) {
+                addTest('Endereços', 'POST /clientes/{id}/enderecos', 'POST', `/clientes/${clienteId}/enderecos`, false, 0, e.message);
+            }
+
+            // Deletar
+            if (state.enderecoId) {
+                try {
+                    const { status, ok } = await api('DELETE', `/clientes/${clienteId}/enderecos/${state.enderecoId}`, null, state.token);
+                    addTest('Endereços', 'DELETE /clientes/{id}/enderecos/{aid}', 'DELETE', `/clientes/${clienteId}/enderecos/${state.enderecoId}`, ok, status);
+                    log(`   ${ok ? '✅' : '❌'} Deletar endereço → ${status}`, ok ? 'ok' : 'err');
+                } catch (e) {
+                    addTest('Endereços', 'DELETE /clientes/{id}/enderecos/{aid}', 'DELETE', `/clientes/${clienteId}/enderecos/${state.enderecoId}`, false, 0, e.message);
+                }
+            }
+        }
+
+        // ═══ CONTAS A RECEBER ═══
+
+        async function testContasReceber() {
+            log('📋 Testando contas a receber...', 'info');
+            const listRes = await api('GET', '/clientes?limit=1', null, state.token);
+            const clienteId = listRes.data?.data?.items?.[0]?.id;
+            if (!clienteId) {
+                addTest('ContasReceber', 'GET /clientes/{id}/contas-receber', 'GET', '/clientes/{id}/contas-receber', false, 0, 'sem cliente');
+                return;
+            }
+            try {
+                const { status, ok } = await api('GET', `/clientes/${clienteId}/contas-receber`, null, state.token);
+                addTest('ContasReceber', 'GET /clientes/{id}/contas-receber', 'GET', `/clientes/${clienteId}/contas-receber`, ok, status);
+                log(`   ${ok ? '✅' : '❌'} Contas a receber → ${status}`, ok ? 'ok' : 'err');
+            } catch (e) {
+                addTest('ContasReceber', 'GET /clientes/{id}/contas-receber', 'GET', `/clientes/${clienteId}/contas-receber`, false, 0, e.message);
+            }
+        }
+
+        // ═══ PEDIDOS ═══
+
+        async function testPedidos() {
+            log('📋 Testando pedidos...', 'info');
+
+            // Listar
+            try {
+                const { status, ok } = await api('GET', '/pedidos', null, state.token);
+                addTest('Pedidos', 'GET /pedidos', 'GET', '/pedidos', ok, status);
+                log(`   ${ok ? '✅' : '❌'} Listar pedidos → ${status}`, ok ? 'ok' : 'err');
+            } catch (e) {
+                addTest('Pedidos', 'GET /pedidos', 'GET', '/pedidos', false, 0, e.message);
+            }
+
+            // Criar (precisa de cliente + produto)
+            const clientes = await api('GET', '/clientes?limit=1', null, state.token);
+            const clienteId = clientes.data?.data?.items?.[0]?.id;
+            const produtos = await api('GET', '/produtos?limit=1', null, state.token);
+            const produtoId = produtos.data?.data?.items?.[0]?.id;
+
+            if (clienteId && produtoId) {
+                try {
+                    const { status, ok, data } = await api('POST', '/pedidos', {
+                        tipo: 'pedido',
+                        cliente_id: clienteId,
+                        itens: [{
+                            produto_id: produtoId,
+                            quantidade: 1,
+                            preco_venda: 10.00,
+                            valor_desconto: 0,
+                        }],
+                    }, state.token);
+                    if (ok && data?.data?.id) {
+                        state.pedidoId = data.data.id;
+                        addTest('Pedidos', 'POST /pedidos', 'POST', '/pedidos', true, status);
+                        log(`   ✅ Pedido criado id=${state.pedidoId}`, 'ok');
+                    } else {
+                        addTest('Pedidos', 'POST /pedidos', 'POST', '/pedidos', false, status, data?.error?.message);
+                        log(`   ❌ Criar pedido → ${status}`, 'err');
+                    }
+                } catch (e) {
+                    addTest('Pedidos', 'POST /pedidos', 'POST', '/pedidos', false, 0, e.message);
+                }
+            } else {
+                addTest('Pedidos', 'POST /pedidos', 'POST', '/pedidos', false, 0, 'sem cliente/produto');
+            }
+
+            // Detalhe
+            if (state.pedidoId) {
+                try {
+                    const { status, ok } = await api('GET', `/pedidos/${state.pedidoId}`, null, state.token);
+                    addTest('Pedidos', 'GET /pedidos/{id}', 'GET', `/pedidos/${state.pedidoId}`, ok, status);
+                    log(`   ${ok ? '✅' : '❌'} Detalhe pedido → ${status}`, ok ? 'ok' : 'err');
+                } catch (e) {
+                    addTest('Pedidos', 'GET /pedidos/{id}', 'GET', `/pedidos/${state.pedidoId}`, false, 0, e.message);
+                }
+
+                // Cancelar
+                try {
+                    const { status, ok } = await api('DELETE', `/pedidos/${state.pedidoId}`, null, state.token);
+                    addTest('Pedidos', 'DELETE /pedidos/{id}', 'DELETE', `/pedidos/${state.pedidoId}`, ok, status);
+                    log(`   ${ok ? '✅' : '❌'} Cancelar pedido → ${status}`, ok ? 'ok' : 'err');
+                } catch (e) {
+                    addTest('Pedidos', 'DELETE /pedidos/{id}', 'DELETE', `/pedidos/${state.pedidoId}`, false, 0, e.message);
+                }
+            }
+        }
+
+        // ═══ CATÁLOGOS ═══
+
+        async function testCatalogos() {
+            log('📋 Testando catálogos...', 'info');
+
+            const catalogos = [
+                '/empresas',
+                '/condicoes-pagamento',
+                '/formas-pagamento',
+                '/transportadoras',
+                '/tabelas-preco',
+                '/produtos',
+            ];
+
+            for (const path of catalogos) {
+                try {
+                    const { status, ok, data } = await api('GET', `${path}?limit=3`, null, state.token);
+                    const hasItems = Array.isArray(data?.data?.items);
+                    const hasCursor = 'nextCursor' in (data?.data || {});
+                    addTest('Catálogos', `GET ${path}`, 'GET', path, ok && hasItems && hasCursor, status);
+                    log(`   ${ok ? '✅' : '❌'} ${path} → ${status}`, ok ? 'ok' : 'err');
+                } catch (e) {
+                    addTest('Catálogos', `GET ${path}`, 'GET', path, false, 0, e.message);
+                }
+            }
+        }
+
+        // ═══ AGENDA E TAREFAS ═══
+
+        async function testAgendaTarefas() {
+            log('📋 Testando agenda e tarefas...', 'info');
+
+            // Agenda
+            try {
+                const { status, ok } = await api('GET', '/agenda', null, state.token);
+                addTest('Agenda', 'GET /agenda', 'GET', '/agenda', ok, status);
+                log(`   ${ok ? '✅' : '❌'} GET /agenda → ${status}`, ok ? 'ok' : 'err');
+            } catch (e) {
+                addTest('Agenda', 'GET /agenda', 'GET', '/agenda', false, 0, e.message);
+            }
+
+            try {
+                const { status, ok, data } = await api('POST', '/agenda', {
+                    titulo: `Teste Suite ${Date.now()}`,
+                    data_agendada: '2026-11-01T10:00:00Z',
+                }, state.token);
+                if (ok && data?.data?.id) {
+                    state.agendaId = data.data.id;
+                    addTest('Agenda', 'POST /agenda', 'POST', '/agenda', true, status);
+                    log(`   ✅ Agenda criada id=${state.agendaId}`, 'ok');
+                } else {
+                    addTest('Agenda', 'POST /agenda', 'POST', '/agenda', false, status, data?.error?.message);
+                }
+            } catch (e) {
+                addTest('Agenda', 'POST /agenda', 'POST', '/agenda', false, 0, e.message);
+            }
+
+            if (state.agendaId) {
+                try {
+                    const { status, ok } = await api('DELETE', `/agenda/${state.agendaId}`, null, state.token);
+                    addTest('Agenda', 'DELETE /agenda/{id}', 'DELETE', `/agenda/${state.agendaId}`, ok, status);
+                    log(`   ${ok ? '✅' : '❌'} Delete agenda → ${status}`, ok ? 'ok' : 'err');
+                } catch (e) {
+                    addTest('Agenda', 'DELETE /agenda/{id}', 'DELETE', `/agenda/${state.agendaId}`, false, 0, e.message);
+                }
+            }
+
+            // Tarefas
+            try {
+                const { status, ok } = await api('GET', '/tarefas', null, state.token);
+                addTest('Tarefas', 'GET /tarefas', 'GET', '/tarefas', ok, status);
+                log(`   ${ok ? '✅' : '❌'} GET /tarefas → ${status}`, ok ? 'ok' : 'err');
+            } catch (e) {
+                addTest('Tarefas', 'GET /tarefas', 'GET', '/tarefas', false, 0, e.message);
+            }
+
+            try {
+                const { status, ok, data } = await api('POST', '/tarefas', {
+                    titulo: `Teste Suite ${Date.now()}`,
+                    prioridade: 'media',
+                }, state.token);
+                if (ok && data?.data?.id) {
+                    state.tarefaId = data.data.id;
+                    addTest('Tarefas', 'POST /tarefas', 'POST', '/tarefas', true, status);
+                    log(`   ✅ Tarefa criada id=${state.tarefaId}`, 'ok');
+                } else {
+                    addTest('Tarefas', 'POST /tarefas', 'POST', '/tarefas', false, status, data?.error?.message);
+                }
+            } catch (e) {
+                addTest('Tarefas', 'POST /tarefas', 'POST', '/tarefas', false, 0, e.message);
+            }
+
+            if (state.tarefaId) {
+                try {
+                    const { status, ok } = await api('DELETE', `/tarefas/${state.tarefaId}`, null, state.token);
+                    addTest('Tarefas', 'DELETE /tarefas/{id}', 'DELETE', `/tarefas/${state.tarefaId}`, ok, status);
+                    log(`   ${ok ? '✅' : '❌'} Delete tarefa → ${status}`, ok ? 'ok' : 'err');
+                } catch (e) {
+                    addTest('Tarefas', 'DELETE /tarefas/{id}', 'DELETE', `/tarefas/${state.tarefaId}`, false, 0, e.message);
+                }
+            }
+        }
+
+        // ═══ SHELL, HOME, NOTIFICAÇÕES ═══
+
+        async function testShellHomeNotif() {
+            log('📋 Testando shell, home, notificações...', 'info');
+
+            const tests = [
+                ['Shell', 'GET /shell/empresa', '/shell/empresa'],
+                ['Home', 'GET /home/indicadores', '/home/indicadores'],
+                ['Notificações', 'GET /notificacoes', '/notificacoes'],
+                ['Notificações', 'GET /notificacoes/nao-lidas/count', '/notificacoes/nao-lidas/count'],
+            ];
+
+            for (const [group, name, path] of tests) {
+                try {
+                    const { status, ok } = await api('GET', path, null, state.token);
+                    addTest(group, name, 'GET', path, ok, status);
+                    log(`   ${ok ? '✅' : '❌'} ${path} → ${status}`, ok ? 'ok' : 'err');
+                } catch (e) {
+                    addTest(group, name, 'GET', path, false, 0, e.message);
+                }
+            }
+        }
+
+        // ═══════════════════════════════════════════════════════════
+        // RENDER
+        // ═══════════════════════════════════════════════════════════
+
+        function renderResults() {
+            const groups = {};
+            for (const r of state.results) {
+                if (!groups[r.group]) groups[r.group] = [];
+                groups[r.group].push(r);
+            }
+
+            const container = document.getElementById('results');
+            container.innerHTML = '';
+
+            for (const [group, tests] of Object.entries(groups)) {
+                const ok = tests.filter(t => t.passed).length;
+                const total = tests.length;
+
+                const div = document.createElement('div');
+                div.className = 'group';
+                div.innerHTML = `
+                    <div class="group-header">
+                        <span>${group}</span>
+                        <span class="group-stats">${ok}/${total}</span>
+                    </div>
+                    ${tests.map(t => `
+                        <div class="test">
+                            <div class="test-icon ${t.passed ? 'ok' : 'err'}">${t.passed ? '✓' : '✗'}</div>
+                            <div class="test-body">
+                                <div class="test-name">
+                                    <span class="badge ${t.method.toLowerCase()}">${t.method}</span>
+                                    ${t.name}
+                                </div>
+                                <div class="test-meta">HTTP ${t.status}</div>
+                                ${t.error ? `<div class="test-error">${t.error}</div>` : ''}
+                            </div>
+                        </div>
+                    `).join('')}
+                `;
+                container.appendChild(div);
+            }
+
+            // Atualiza progresso
+            const totalTests = state.results.length;
+            document.getElementById('progress').style.width = `${Math.min(totalTests * 3, 100)}%`;
+        }
+
+        function finish() {
+            state.running = false;
+            document.getElementById('runBtn').disabled = false;
+            document.getElementById('progress').style.width = '100%';
+
+            const ok = state.results.filter(r => r.passed).length;
+            const err = state.results.filter(r => !r.passed).length;
+            const time = ((Date.now() - state.startTime) / 1000).toFixed(1);
+
+            document.getElementById('statTotal').textContent = state.results.length;
+            document.getElementById('statOk').textContent = ok;
+            document.getElementById('statErr').textContent = err;
+            document.getElementById('statTime').textContent = `${time}s`;
+            document.getElementById('summary').style.display = 'grid';
+
+            log('');
+            log(`🏁 Suite concluída em ${time}s`, 'info');
+            log(`   Total: ${state.results.length} | ✅ ${ok} | ❌ ${err}`, ok > 0 && err === 0 ? 'ok' : 'err');
+
+            if (err === 0) {
+                log('🎉 Todos os testes passaram!', 'ok');
+            }
+        }
+
+        function clearResults() {
+            state.results = [];
+            document.getElementById('results').innerHTML = '';
+            document.getElementById('log').innerHTML = '';
+            document.getElementById('log').style.display = 'none';
+            document.getElementById('summary').style.display = 'none';
+            document.getElementById('progress').style.width = '0%';
+        }
+
+        function exportReport() {
+            const ok = state.results.filter(r => r.passed).length;
+            const err = state.results.filter(r => !r.passed).length;
+            const time = ((Date.now() - state.startTime) / 1000).toFixed(1);
+
+            const report = {
+                gerado_em: new Date().toISOString(),
+                api_url: apiUrl(),
+                total: state.results.length,
+                passou: ok,
+                falhou: err,
+                tempo_segundos: parseFloat(time),
+                testes: state.results,
+            };
+
+            const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `visionflow-api-tests-${Date.now()}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        // ═══════════════════════════════════════════════════════════
+        // INIT
+        // ═══════════════════════════════════════════════════════════
+
+        document.getElementById('log').style.display = 'block';
+        log('Aguardando início dos testes...', 'dim');
+        log('Configure a URL, email e senha e clique em "Rodar todos os testes".', 'dim');
+    </script>
+</body>
+</html>
