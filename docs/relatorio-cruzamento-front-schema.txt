@@ -1,0 +1,583 @@
+================================================================================
+RELATÓRIO DE CRUZAMENTO — FRONT REACT × SCHEMA POSTGRESQL
+================================================================================
+Base............: relatorio front.txt (inventário) × schema.sql (PostgreSQL 16)
+Decisões........: API em snake_case; notificações consolidadas em 1 domínio;
+                  conta a receber filtrada por codigo_erp_cliente + sessão;
+                  títulos = contas a receber (read-only);
+                  scroll infinito é requisito NOVO (front não usa hoje).
+Aviso inicial...: o schema NÃO cobre, sem derivação, três entidades do inventário:
+                  (a) notificações/avisos, (b) indicadores da Home,
+                  (c) regional da empresa. Também NÃO há tabela de agenda/tarefa
+                  (pendingAgendas / pendingTasks ficam sem origem).
+================================================================================
+
+
+================================================================================
+### Domínio: auth
+================================================================================
+
+1) MAPA DE CAMPOS — FRONT × BANCO
+--------------------------------------------------------------------------------
+| Campo front       | Campo banco        | Tipo front | Tipo banco   | Status         | Ação                                   |
+|-------------------|--------------------|------------|--------------|----------------|----------------------------------------|
+| email             | usuario.email      | string     | varchar(200) | ✅ bate        | mapear                                 |
+| password          | usuario.senha_hash | string     | varchar(255) | ⚠️ nome difere | mapear (hash no backend)               |
+| id                | usuario.cod_usuario| number     | integer      | ⚠️ nome difere | mapear                                 |
+| name              | usuario.nome       | string     | varchar(200) | ⚠️ nome difere | mapear                                 |
+| email (usuário)   | usuario.email      | string     | varchar(200) | ✅ bate        | mapear                                 |
+| token             | —                  | string     | —            | ❌ falta no banco | investigar (JWT emitido pelo Go)     |
+
+2) DIVERGÊNCIAS CRÍTICAS
+--------------------------------------------------------------------------------
+- token não existe no schema — esperado, JWT é emitido pela API.
+- usuario tem cod_tenant mas NÃO tem cod_empresa. Login precisa resolver
+  usuario_empresa (empresa_padrao) para SET LOCAL app.cod_empresa.
+- usuario.tipo (admin|gerente|vendedor|supervisor) não é usado no front
+  → ❌ falta no front, ignorar por ora.
+
+3) OPERAÇÕES NECESSÁRIAS (ENDPOINTS)
+--------------------------------------------------------------------------------
+| Operação    | Método + rota      | Tabela(s)                            | JOINs | Cálculos                       | Obs                                          |
+|-------------|--------------------|--------------------------------------|-------|--------------------------------|----------------------------------------------|
+| Autenticar  | POST /auth/login   | usuario, usuario_empresa, empresa    | sim   | hash de senha; emissão JWT     | retorna usuario {id,nome,email} + token      |
+
+4) PENDÊNCIAS DE INVESTIGAÇÃO
+--------------------------------------------------------------------------------
+- Logout sem endpoint (front limpa Zustand + localStorage). Stateless ou blacklist?
+- Formato do JWT e claims (cod_tenant, cod_empresa, cod_usuario) — decisão.
+
+
+================================================================================
+### Domínio: catalogo (auxiliares de pedido)
+================================================================================
+
+1) MAPA DE CAMPOS — FRONT × BANCO
+--------------------------------------------------------------------------------
+| Campo front                     | Campo banco                                  | Tipo front | Tipo banco     | Status            | Ação                                    |
+|---------------------------------|----------------------------------------------|------------|----------------|-------------------|-----------------------------------------|
+| Empresa.id                      | empresa.cod_empresa                          | number     | integer        | ⚠️ nome difere     | mapear                                  |
+| Empresa.nome                    | empresa.nome_fantasia / razao_social         | string     | varchar(200)   | ⚠️ nome difere     | mapear (fallback razao_social)          |
+| Condição.id                     | condicao_pagamento.codigo                    | number     | integer        | ⚠️ nome difere     | mapear                                  |
+| Condição.descricao              | condicao_pagamento.descricao                 | string     | varchar(100)   | ✅ bate            | mapear                                  |
+| Forma.id                        | forma_pagamento.codigo                       | number     | integer        | ⚠️ nome difere     | mapear                                  |
+| Forma.descricao                 | forma_pagamento.descricao                    | string     | varchar(100)   | ✅ bate            | mapear                                  |
+| Transportadora.id               | transportadora.codigo                        | number     | integer        | ⚠️ nome difere     | mapear                                  |
+| Transportadora.nome             | transportadora.nome_razao                    | string     | varchar(100)   | ⚠️ nome difere     | mapear                                  |
+| Tabela preço.id                 | tabela_preco.codigo                          | number     | integer        | ⚠️ nome difere     | mapear                                  |
+| Tabela preço.nome               | tabela_preco.descricao                       | string     | varchar(100)   | ⚠️ nome difere     | mapear                                  |
+| Tabela preço.vigencia           | tabela_preco.dt_entrega_minima/maxima        | string     | date           | ⚠️ tipo difere     | investigar                              |
+| Produto.id                      | item.codigo                                  | number     | integer        | ⚠️ nome difere     | mapear                                  |
+| Produto.codigo                  | item.codigo_erp                              | string     | varchar(20)    | ⚠️ nome difere     | mapear                                  |
+| Produto.descricao               | item.descricao                               | string     | varchar(200)   | ✅ bate            | mapear                                  |
+| Produto.familia                 | item.descricao_categoria_nivel1 (+2/3)       | string     | varchar(100)   | 🔶 derivado        | calcular no backend                     |
+| Produto.marca                   | item.apelido_fantasia_fabricante             | string     | varchar(100)   | ⚠️ nome difere     | mapear                                  |
+| Produto.unidade                 | unidade_medida.sigla (via codigo_erp_...)    | string     | varchar(20)    | 🔶 derivado        | calcular (JOIN unidade_medida)          |
+| Produto.tabela_preco_padrao_id  | tabela_preco_item.codigo_erp_tabela_preco    | number     | varchar(20)    | ⚠️ tipo difere     | converter (ERP → codigo)                |
+| Produto.preco_venda             | item.preco_venda / tabela_preco_item.preco   | number     | numeric(15,4)  | 🔶 derivado        | calcular (depende da tabela)            |
+
+2) DIVERGÊNCIAS CRÍTICAS
+--------------------------------------------------------------------------------
+- Front usa IDs numéricos; banco usa PK composta (cod_tenant, cod_empresa, codigo).
+  API expõe id = codigo; sessão fornece tenant/empresa.
+- produto.familia não existe como campo único; banco tem 3 níveis de categoria.
+- produto.unidade exige JOIN com unidade_medida via codigo_erp_unidade_medida.
+- tabela_preco.vigencia não tem equivalente direto; datas no schema são de
+  ENTREGA, não de vigência. Investigar tabela_preco_item.validade_inicial/final.
+
+3) OPERAÇÕES NECESSÁRIAS (ENDPOINTS)
+--------------------------------------------------------------------------------
+| Operação                       | Método + rota              | Tabela(s)                | JOINs | Cálculos                                   | Obs                                  |
+|--------------------------------|----------------------------|--------------------------|-------|--------------------------------------------|--------------------------------------|
+| Listar empresas                | GET /empresas              | empresa                  | não   | —                                          | filtro cod_tenant (sessão)           |
+| Listar condições de pagamento  | GET /condicoes-pagamento   | condicao_pagamento       | não   | —                                          | filtro ativo=true                    |
+| Listar formas de pagamento     | GET /formas-pagamento      | forma_pagamento          | não   | —                                          | filtro ativo=true                    |
+| Listar transportadoras         | GET /transportadoras       | transportadora           | não   | —                                          | filtro ativo=true                    |
+| Listar tabelas de preço        | GET /tabelas-preco         | tabela_preco             | não   | —                                          | filtro ativo=true                    |
+| Listar produtos                | GET /produtos              | item, unidade_medida     | sim   | familia, unidade, tabela_preco_padrao, preço| filtro ativo=true; SCROLL NOVO      |
+
+4) PENDÊNCIAS DE INVESTIGAÇÃO
+--------------------------------------------------------------------------------
+- Front importa catálogos direto de JSON. Endpoints acima ainda não existem.
+- tabela_preco.vigencia: qual campo? (vigência da tabela vs prazo de entrega)
+- produto.tabela_preco_padrao_id: schema não tem "tabela padrão do produto".
+
+
+================================================================================
+### Domínio: cliente
+================================================================================
+
+1) MAPA DE CAMPOS — FRONT × BANCO
+--------------------------------------------------------------------------------
+| Campo front                | Campo banco                                       | Tipo front              | Tipo banco        | Status            | Ação                                       |
+|----------------------------|---------------------------------------------------|-------------------------|-------------------|-------------------|--------------------------------------------|
+| id                         | cliente.codigo                                    | number/null             | integer           | ⚠️ nome difere     | mapear (null = novo)                       |
+| name                       | cliente.nome_razao_social                         | string                  | varchar(100)      | ⚠️ nome difere     | mapear                                     |
+| legalName                  | cliente.nome_razao_social                         | string                  | varchar(100)      | ✅ bate            | mapear (mesmo de name)                     |
+| tradeName                  | cliente.nome_fantasia                             | string                  | varchar(100)      | ⚠️ nome difere     | mapear                                     |
+| taxId                      | cliente.cnpj_cpf                                  | string                  | varchar(20)       | ⚠️ nome difere     | mapear                                     |
+| stateRegistration          | cliente.inscricao_estadual_rg                     | string                  | varchar(20)       | ⚠️ nome difere     | mapear                                     |
+| personType                 | cliente.tipo_pessoa                               | 'PF'|'PJ'               | char(1) F|J       | ⚠️ tipo difere     | converter (PF↔F, PJ↔J)                     |
+| prospect                   | cliente.prospect                                  | boolean                 | boolean           | ✅ bate            | mapear                                     |
+| status                     | cliente.ativo                                     | string                  | boolean           | ⚠️ tipo difere     | converter                                  |
+| registrationStatus         | cliente.data_bloqueio / motivo_bloqueio           | string                  | date/varchar      | 🔶 derivado        | calcular                                   |
+| purchaseStatus             | —                                                 | aberto|bloqueado|...     | —                 | 🔶 derivado        | calcular (regra do ERP — ver pendência)    |
+| openedAt                   | cliente.data_inclusao                             | string                  | date              | ⚠️ nome difere     | mapear                                     |
+| addressSummary             | logradouro + numero + cidade                      | string                  | varchar           | 🔶 derivado        | calcular no backend                        |
+| fullAddress                | + cep, bairro, estado                             | string                  | varchar           | 🔶 derivado        | calcular no backend                        |
+| lastVisit                  | —                                                 | string/null             | —                 | ❌ falta no banco  | investigar                                 |
+| lastOrder                  | pedido.data_emissao (MAX)                         | string/null             | date              | 🔶 derivado        | calcular (subquery)                        |
+| lastAttendance             | —                                                 | string/null             | —                 | ❌ falta no banco  | investigar                                 |
+| integrationId              | cliente.codigo_erp                                | string                  | varchar(20)       | ⚠️ nome difere     | mapear                                     |
+| userNotes                  | —                                                 | string                  | —                 | ❌ falta no banco  | investigar                                 |
+| erpNotes                   | cliente.anotacao_erp                              | string                  | text              | ⚠️ nome difere     | mapear                                     |
+| creditLimit                | cliente.limite_credito_total                      | number                  | numeric(15,4)     | ⚠️ nome difere     | mapear                                     |
+| carrierId                  | cliente.codigo_erp_transportadora                 | number/null             | varchar(20)       | ⚠️ tipo difere     | converter                                  |
+| paymentConditionId         | cliente.codigo_erp_condicao_pagamento             | number/null             | varchar(20)       | ⚠️ tipo difere     | converter                                  |
+| paymentMethodId            | cliente.codigo_erp_forma_pagamento                | number/null             | varchar(20)       | ⚠️ tipo difere     | converter                                  |
+| priceTableId               | cliente.codigo_erp_tabela_preco                   | number/null             | varchar(20)       | ⚠️ tipo difere     | converter                                  |
+| addresses                  | cliente_endereco_adicional (N)                    | array                   | table             | ⚠️ nome difere     | mapear                                     |
+| titles                     | cliente_conta_receber (N)                         | array                   | table             | ⚠️ nome difere     | mapear (read-only)                         |
+| billingContact/invoiceEmail| cliente.nome_contato_faturamento / email_...      | string                  | varchar           | ⚠️ nome difere     | mapear                                     |
+| buyerContact/buyerEmail    | cliente.nome_contato_comprador / email_...        | string                  | varchar           | ⚠️ nome difere     | mapear                                     |
+| commercialPhone/mobilePhone| cliente.telefone1 / celular                       | string                  | varchar(20)       | ⚠️ nome difere     | mapear                                     |
+| otherPhone                 | cliente.telefone2                                 | string                  | varchar(20)       | ⚠️ nome difere     | mapear                                     |
+| Endereço.id                | cliente_endereco_adicional.codigo                 | number                  | integer           | ⚠️ nome difere     | mapear                                     |
+| Endereço.type              | cliente_endereco_adicional.tipo_endereco          | entrega|cobranca|res.  | char(1) E|C|A   | ⚠️ tipo difere     | converter (residencial não existe)         |
+| Endereço.purpose           | cliente_endereco_adicional.endereco_padrao        | principal|secundario  | boolean           | ⚠️ tipo difere     | converter                                  |
+| Endereço.zipCode           | cliente_endereco_adicional.cep                    | string                  | varchar(10)       | ⚠️ nome difere     | mapear                                     |
+| Endereço.street            | cliente_endereco_adicional.logradouro             | string                  | varchar(100)      | ⚠️ nome difere     | mapear                                     |
+| Endereço.number            | cliente_endereco_adicional.numero_endereco        | string                  | varchar(20)       | ⚠️ nome difere     | mapear                                     |
+| Endereço.complement        | cliente_endereco_adicional.complemento_endereco   | string                  | varchar(100)      | ⚠️ nome difere     | mapear                                     |
+| Endereço.district          | cliente_endereco_adicional.bairro                 | string                  | varchar(100)      | ⚠️ nome difere     | mapear                                     |
+| Endereço.city              | cliente_endereco_adicional.cidade                 | string                  | varchar(100)      | ✅ bate            | mapear                                     |
+| Endereço.state             | cliente_endereco_adicional.estado                 | string                  | char(2)           | ✅ bate            | mapear                                     |
+| Endereço.reference         | cliente_endereco_adicional.ponto_referencia       | string                  | varchar(200)      | ⚠️ nome difere     | mapear                                     |
+| Endereço.deliveryRestr.    | cliente_endereco_adicional.restricoes_horarios    | string                  | varchar(200)      | ⚠️ nome difere     | mapear                                     |
+| Consulta CNPJ.*            | —                                                 | strings                 | —                 | ❌ falta no banco  | integração externa                         |
+
+2) DIVERGÊNCIAS CRÍTICAS
+--------------------------------------------------------------------------------
+- Endereço.type: front aceita "residencial"; banco só C/E/A. ❌ mapeamento quebrado.
+- purchaseStatus: front filtra por aberto|bloqueado|em_digitacao|sem_compra,
+  mas schema não tem esse campo. 🔶 regra derivada necessária.
+- userNotes NÃO existe no schema. ❌ investigar (criar coluna ou usar
+  cliente_campo_adicional).
+- lastVisit / lastAttendance sem origem. ❌ investigar (não há tabela de visita).
+- IDs de referência (carrierId, paymentConditionId, etc.) vêm como codigo_erp_*
+  string no banco e como number no front → conversão obrigatória no backend.
+- titles depende de cliente_conta_receber — OK, read-only, com situacao calculada.
+
+3) OPERAÇÕES NECESSÁRIAS (ENDPOINTS)
+--------------------------------------------------------------------------------
+| Operação                            | Método + rota                          | Tabela(s)                                              | JOINs | Cálculos                                              | Obs                                        |
+|-------------------------------------|----------------------------------------|--------------------------------------------------------|-------|-------------------------------------------------------|--------------------------------------------|
+| Listar clientes                     | GET /clientes                          | cliente                                                | não   | status, purchaseStatus                                | SCROLL NOVO; filtros hoje locais           |
+| Obter cliente                       | GET /clientes/{id}                     | cliente, cliente_endereco_adicional, cliente_conta_rec.| sim   | addressSummary, fullAddress, lastOrder, titles.situacao| {id} = codigo                              |
+| Criar                               | POST /clientes                         | cliente, cliente_endereco_adicional                    | não   | validar tipo_pessoa; converter PF/PJ                  | payload em snake_case                      |
+| Editar                              | PUT /clientes/{id}                     | idem                                                   | não   | idem                                                  | front envia mistura camel+snake            |
+| Deletar                             | DELETE /clientes/{id}                  | cliente                                                | não   | —                                                     | soft delete? decidir                       |
+| Consultar CNPJ                      | GET /clientes/cnpj/{taxId}             | —                                                      | —     | —                                                     | integração externa                         |
+| Listar endereços                    | GET /clientes/{id}/enderecos           | cliente_endereco_adicional                             | não   | converter tipo_endereco                               |                                            |
+| Salvar endereço                     | POST /clientes/{id}/enderecos          | cliente_endereco_adicional                             | não   | —                                                     | front hoje salva dentro do cliente         |
+| Excluir endereço                    | DELETE /clientes/{id}/enderecos/{aid}  | idem                                                   | não   | —                                                     |                                            |
+| Consultar CEP                       | GET /cep/{zipCode}                     | —                                                      | —     | —                                                     | integração externa                         |
+| Listar contas a receber do cliente  | GET /clientes/{id}/contas-receber      | cliente_conta_receber                                  | não   | situacao derivada                                     | filtro codigo_erp_cliente + sessão         |
+
+4) PENDÊNCIAS DE INVESTIGAÇÃO
+--------------------------------------------------------------------------------
+- purchaseStatus: regra de negócio não documentada no schema.
+- userNotes: criar coluna em cliente ou usar cliente_campo_adicional?
+- lastVisit / lastAttendance: não há tabela de visita/atendimento.
+- tipo_endereco='residencial' do front não existe no banco — remover do front?
+- Conversão codigo_erp_* → codigo: backend resolve via JOIN ou front usa ERP?
+
+
+================================================================================
+### Domínio: contas-receber (títulos do cliente — READ-ONLY)
+================================================================================
+
+1) MAPA DE CAMPOS — FRONT × BANCO
+--------------------------------------------------------------------------------
+| Campo front   | Campo banco                              | Tipo front        | Tipo banco    | Status         | Ação                      |
+|---------------|------------------------------------------|-------------------|---------------|----------------|---------------------------|
+| id            | cliente_conta_receber.codigo             | number            | integer       | ⚠️ nome difere | mapear                    |
+| title         | titulo_numero_documento OU titulo_especie| string            | varchar(50)   | ⚠️ nome difere | mapear (definir qual)     |
+| installment   | titulo_numero_parcela                    | string            | varchar(20)   | ⚠️ nome difere | mapear                    |
+| documentType  | titulo_especie_documento                 | string            | varchar(50)   | ⚠️ nome difere | mapear                    |
+| series        | titulo_serie                             | string            | varchar(20)   | ⚠️ nome difere | mapear                    |
+| issueDate     | data_emissao                             | string (Y-M-D)    | date          | ⚠️ nome difere | mapear                    |
+| dueDate       | data_vencimento                          | string (Y-M-D)    | date          | ⚠️ nome difere | mapear                    |
+| openAmount    | valor_total_aberto                       | number            | numeric(15,4) | ⚠️ nome difere | mapear                    |
+| situacao      | —                                        | aberto|vencido|pago | —           | 🔶 derivado    | calcular no backend       |
+
+2) DIVERGÊNCIAS CRÍTICAS
+--------------------------------------------------------------------------------
+- situacao é 100% derivada:
+    pago    → data_liquidacao IS NOT NULL
+    vencido → data_liquidacao IS NULL AND data_vencimento < CURRENT_DATE
+    aberto  → caso contrário
+- title ambíguo: titulo_numero_documento ou titulo_especie_documento?
+- installment no mock é "1/3"; banco tem titulo_numero_parcela — compatível.
+
+3) OPERAÇÕES NECESSÁRIAS (ENDPOINTS)
+--------------------------------------------------------------------------------
+| Operação                          | Método + rota                      | Tabela(s)                | JOINs | Cálculos            | Obs                                            |
+|-----------------------------------|------------------------------------|--------------------------|-------|---------------------|------------------------------------------------|
+| Listar contas a receber do cliente| GET /clientes/{id}/contas-receber  | cliente_conta_receber    | não   | situacao derivada   | filtro codigo_erp_cliente + sessão; READ-ONLY |
+
+4) PENDÊNCIAS DE INVESTIGAÇÃO
+--------------------------------------------------------------------------------
+- title: número do documento ou espécie?
+- Confirmar que cliente_conta_receber só tem títulos EM ABERTO (comentário do
+  schema). Se sim, situacao='pago' nunca ocorrerá nessa tabela.
+
+
+================================================================================
+### Domínio: empresa (shell)
+================================================================================
+
+1) MAPA DE CAMPOS — FRONT × BANCO
+--------------------------------------------------------------------------------
+| Campo front          | Campo banco                          | Tipo front | Tipo banco   | Status            | Ação                                  |
+|----------------------|--------------------------------------|------------|--------------|-------------------|---------------------------------------|
+| name                 | empresa.nome_fantasia / razao_social | string     | varchar(200) | ⚠️ nome difere     | mapear                                |
+| taxId                | empresa.cnpj                         | string     | varchar(18)  | ⚠️ nome difere     | mapear                                |
+| region               | —                                    | string     | —            | ❌ falta no banco  | investigar (não há "regional")        |
+| contact              | empresa.telefone / email             | string     | varchar      | ⚠️ nome difere     | mapear (decidir qual)                 |
+| loggedInUser.id      | usuario.cod_usuario                  | number     | integer      | ⚠️ nome difere     | mapear                                |
+| loggedInUser.name    | usuario.nome                         | string     | varchar(200) | ⚠️ nome difere     | mapear                                |
+| loggedInUser.email   | usuario.email                        | string     | varchar(200) | ✅ bate            | mapear                                |
+| unreadNotifications  | —                                    | number     | —            | ❌ falta no banco  | TABELA AUSENTE — ver notificacoes     |
+
+2) DIVERGÊNCIAS CRÍTICAS
+--------------------------------------------------------------------------------
+- region NÃO existe em empresa. Schema tem endereço (cidade/estado/bairro) mas
+  não tem "regional". ❌ falta no banco.
+- unreadNotifications depende de tabela de notificações — não existe.
+- contact mapeia para telefone ou email? Ambíguo.
+
+3) OPERAÇÕES NECESSÁRIAS (ENDPOINTS)
+--------------------------------------------------------------------------------
+| Operação                        | Método + rota              | Tabela(s)        | JOINs | Cálculos | Obs                                    |
+|---------------------------------|----------------------------|------------------|-------|----------|----------------------------------------|
+| Obter empresa + usuário logado  | GET /shell/empresa         | empresa, usuario | sim   | —        | usa cod_empresa da sessão              |
+| Obter contador de não lidas     | GET /shell/notificacoes    | —                | —     | —        | TABELA AUSENTE — criar/derivar         |
+
+4) PENDÊNCIAS DE INVESTIGAÇÃO
+--------------------------------------------------------------------------------
+- region: criar coluna em empresa? Derivar de estado? Remover do front?
+- contact: telefone ou email?
+- Tabela de notificações: criar ou derivar?
+
+
+================================================================================
+### Domínio: home (indicadores)
+================================================================================
+
+1) MAPA DE CAMPOS — FRONT × BANCO
+--------------------------------------------------------------------------------
+| Campo front              | Campo banco                            | Tipo front | Tipo banco       | Status            | Ação                          |
+|--------------------------|----------------------------------------|------------|------------------|-------------------|-------------------------------|
+| salesThisMonth           | pedido + pedido_item (soma)            | number     | —                | 🔶 derivado        | calcular (soma por mês)       |
+| salesToday               | idem, filtro dia                       | number     | —                | 🔶 derivado        | calcular                      |
+| ordersInDraft            | pedido.situacao_pedido                 | number     | char(2)          | 🔶 derivado        | contar (código em digitação)  |
+| budgetsInDraft           | pedido.e_um_orcamento + situacao       | number     | boolean + char(2)| 🔶 derivado        | contar                        |
+| clientsInDraft           | cliente (regra)                        | number     | —                | 🔶 derivado        | depende purchaseStatus        |
+| ordersAwaitingApproval   | pedido.situacao_pedido                 | number     | char(2)          | 🔶 derivado        | contar                        |
+| pendingAgendas           | —                                      | number     | —                | ❌ falta no banco  | TABELA AUSENTE (agenda)       |
+| pendingTasks             | —                                      | number     | —                | ❌ falta no banco  | TABELA AUSENTE (tarefa)       |
+| unreadNotifications      | —                                      | number     | —                | ❌ falta no banco  | TABELA AUSENTE (notificação)  |
+
+2) DIVERGÊNCIAS CRÍTICAS
+--------------------------------------------------------------------------------
+- pendingAgendas e pendingTasks NÃO têm origem. TABELA AUSENTE.
+- unreadNotifications idem.
+- clientsInDraft depende da regra de purchaseStatus (não definida).
+- ordersInDraft, budgetsInDraft, ordersAwaitingApproval dependem de mapear
+  situacao_pedido (char 2) → strings do front. Comentário do schema NÃO cobre
+  "em digitação" nem "aguardando aprovação". Investigação crítica.
+- Totais de venda não existem pré-calculados. Derivar de pedido_item.
+
+3) OPERAÇÕES NECESSÁRIAS (ENDPOINTS)
+--------------------------------------------------------------------------------
+| Operação                  | Método + rota            | Tabela(s)                            | JOINs | Cálculos              | Obs                              |
+|---------------------------|--------------------------|--------------------------------------|-------|-----------------------|----------------------------------|
+| Obter indicadores da Home | GET /home/indicadores    | pedido, pedido_item, cliente         | sim   | somas e contagens     | 3 contadores sem origem          |
+
+4) PENDÊNCIAS DE INVESTIGAÇÃO
+--------------------------------------------------------------------------------
+- Mapeamento situacao_pedido (char 2) → em_digitacao/aguardando_aprovacao/
+  aprovado/cancelado. Comentário do schema não cobre. BLOQUEIO CRÍTICO.
+- pendingAgendas, pendingTasks: criar tabelas ou remover da Home?
+- clientsInDraft: depende de purchaseStatus (não definido).
+- unreadNotifications: depende de tabela de notificações.
+
+
+================================================================================
+### Domínio: notificacoes
+================================================================================
+
+1) MAPA DE CAMPOS — FRONT × BANCO
+--------------------------------------------------------------------------------
+| Campo front      | Campo banco | Tipo front   | Tipo banco | Status            | Ação                                  |
+|------------------|-------------|--------------|------------|-------------------|---------------------------------------|
+| id               | —           | number       | —          | ❌ falta no banco  | TABELA AUSENTE                        |
+| titulo / title   | —           | string       | —          | ❌ falta no banco  | TABELA AUSENTE                        |
+| lida             | —           | boolean      | —          | ❌ falta no banco  | TABELA AUSENTE                        |
+| data / date      | —           | string (ISO) | —          | ❌ falta no banco  | TABELA AUSENTE                        |
+| nao_lidas        | —           | number       | —          | ❌ falta no banco  | TABELA AUSENTE                        |
+
+2) DIVERGÊNCIAS CRÍTICAS
+--------------------------------------------------------------------------------
+- TABELA AUSENTE — precisa ser criada ou derivada de <fonte>. Não há tabela de
+  notificações/avisos no schema. Todo o domínio (lista + contador) depende disso.
+- Front usa 2 endpoints (GET /notificacoes e GET /shell/notificacoes),
+  consolidados em 1 domínio conforme decisão.
+
+3) OPERAÇÕES NECESSÁRIAS (ENDPOINTS)
+--------------------------------------------------------------------------------
+| Operação                | Método + rota            | Tabela(s) | JOINs | Cálculos | Obs                                  |
+|-------------------------|--------------------------|-----------|-------|----------|--------------------------------------|
+| Listar notificações     | GET /notificacoes        | —         | —     | —        | TABELA AUSENTE — precisa ser criada  |
+| Contador de não lidas   | GET /shell/notificacoes  | —         | —     | —        | TABELA AUSENTE — pode derivar        |
+
+4) PENDÊNCIAS DE INVESTIGAÇÃO
+--------------------------------------------------------------------------------
+- Criar tabela notificacao? (cod_tenant, cod_empresa, codigo, cod_usuario,
+  titulo, lida, data, tipo...) Decisão de arquitetura.
+- Se derivada: de qual fonte? (pedido_historico? cliente_conta_receber vencido?)
+
+
+================================================================================
+### Domínio: pedido (inclui orçamento)
+================================================================================
+
+1) MAPA DE CAMPOS — FRONT × BANCO
+--------------------------------------------------------------------------------
+| Campo front                  | Campo banco                                    | Tipo front         | Tipo banco        | Status            | Ação                            |
+|------------------------------|------------------------------------------------|--------------------|-------------------|-------------------|---------------------------------|
+| id                           | pedido.codigo                                  | number/null        | integer           | ⚠️ nome difere     | mapear                          |
+| type                         | pedido.e_um_orcamento                          | pedido|orcamento   | boolean           | ⚠️ tipo difere     | converter                       |
+| number                       | pedido.nosso_codigo_pedido                     | string             | varchar(20)       | ⚠️ nome difere     | mapear                          |
+| customerOrderNumber          | pedido.nro_pedido_cliente                      | string             | varchar(50)       | ⚠️ nome difere     | mapear                          |
+| status                       | pedido.situacao_pedido                         | em_dig|...          | char(2) numérico  | ⚠️ tipo difere     | converter (ver pendência)       |
+| issueDate                    | pedido.data_emissao                            | string             | date              | ⚠️ nome difere     | mapear                          |
+| deliveryDate                 | pedido_item.data_entrega (ou capa)             | string             | date              | ⚠️ nome difere     | mapear (definir capa/item)      |
+| companyId                    | pedido.codigo_erp_empresa                      | number/null        | varchar(20)       | ⚠️ tipo difere     | converter                       |
+| customerId                   | pedido.codigo_erp_cliente                      | number/null        | varchar(20)       | ⚠️ tipo difere     | converter                       |
+| paymentConditionId           | pedido.codigo_erp_condicao_pagamento           | number/null        | varchar(20)       | ⚠️ tipo difere     | converter                       |
+| paymentMethodId              | pedido.codigo_erp_forma_pagamento              | number/null        | varchar(20)       | ⚠️ tipo difere     | converter                       |
+| carrierId                    | pedido.codigo_erp_transportadora               | number/null        | varchar(20)       | ⚠️ tipo difere     | converter                       |
+| billingAddressId             | pedido.endereco_ident_faturamento              | number/null        | varchar(50)       | ⚠️ tipo difere     | converter                       |
+| deliveryAddressId            | pedido.endereco_ident_entrega                  | number/null        | varchar(50)       | ⚠️ tipo difere     | converter                       |
+| collectionAddressId          | pedido.endereco_ident_cobranca                 | number/null        | varchar(50)       | ⚠️ tipo difere     | converter                       |
+| customerName                 | cliente.nome_razao_social (JOIN)               | string             | varchar(100)      | 🔶 derivado        | calcular (JOIN)                 |
+| customerTaxId                | pedido.cliente_cnpj_cpf                        | string             | varchar(20)       | ✅ bate            | mapear                          |
+| observation                  | pedido.observacoes_pedido                      | string             | text              | ⚠️ nome difere     | mapear                          |
+| invoiceObservation           | pedido.observacoes_nota_fiscal                 | string             | text              | ⚠️ nome difere     | mapear                          |
+| freightAmount                | pedido.valor_frete                             | number             | numeric(15,4)     | ⚠️ nome difere     | mapear                          |
+| items                        | pedido_item (N)                                | array              | table             | ⚠️ nome difere     | mapear                          |
+| totals                       | —                                              | objeto             | —                 | 🔶 derivado        | calcular de pedido_item         |
+| totals.mixQuantity           | —                                              | number             | —                 | 🔶 derivado        | SKUs distintos                  |
+| totals.volumeQuantity        | —                                              | number             | —                 | 🔶 derivado        | soma embalagem/volumes          |
+| totals.totalCubicVolume      | —                                              | number             | —                 | 🔶 derivado        | cubagem × quantidade            |
+| totals.netWeight             | —                                              | number             | —                 | 🔶 derivado        | peso_liquido × quantidade       |
+| totals.grossWeight           | —                                              | number             | —                 | 🔶 derivado        | peso_bruto × quantidade         |
+| totals.grossTotal            | —                                              | number             | —                 | 🔶 derivado        | soma itens + frete              |
+| totals.discountTotal         | —                                              | number             | —                 | 🔶 derivado        | soma descontos                  |
+| totals.netTotal              | —                                              | number             | —                 | 🔶 derivado        | gross - discount                |
+| Item.sequence                | pedido_item.codigo_erp_item_pedido             | number             | varchar(20)       | ⚠️ tipo difere     | converter                       |
+| Item.customerCode            | —                                              | string             | —                 | ❌ falta no banco  | investigar                      |
+| Item.product.id              | pedido_item.codigo_erp_produto                 | number             | varchar(20)       | ⚠️ tipo difere     | converter                       |
+| Item.product.code            | item.codigo_erp (JOIN)                         | string             | varchar(20)       | 🔶 derivado        | calcular (JOIN)                 |
+| Item.product.description     | item.descricao (JOIN)                          | string             | varchar(200)      | 🔶 derivado        | calcular                        |
+| Item.product.family          | item.descricao_categoria_nivel1                | string             | varchar(100)      | 🔶 derivado        | calcular                        |
+| Item.product.brand           | item.apelido_fantasia_fabricante               | string             | varchar(100)      | 🔶 derivado        | calcular                        |
+| Item.product.unit            | unidade_medida.sigla                           | string             | varchar(20)       | 🔶 derivado        | calcular (JOIN)                 |
+| Item.product.netWeight       | item.peso_liquido                              | number             | numeric           | 🔶 derivado        | calcular                        |
+| Item.product.grossWeight     | item.peso_bruto                                | number             | numeric           | 🔶 derivado        | calcular                        |
+| Item.product.cubicVolume     | item.cubagem_embalagem                         | number             | numeric           | 🔶 derivado        | calcular                        |
+| Item.product.length          | item.comprimento_embalagem                     | number             | numeric           | 🔶 derivado        | calcular                        |
+| Item.product.width           | item.largura_embalagem                         | number             | numeric           | 🔶 derivado        | calcular                        |
+| Item.product.height          | item.altura_embalagem                          | number             | numeric           | 🔶 derivado        | calcular                        |
+| Item.product.packageQuantity | item.qtde_volumes_embalagem                    | number             | numeric           | 🔶 derivado        | calcular                        |
+| Item.product.stock           | item_estoque.quantidade                        | number             | numeric           | 🔶 derivado        | calcular (JOIN)                 |
+| Item.product.allowsOutOfStock| item.permite_venda_sem_estoque                 | boolean            | boolean           | ✅ bate (JOIN)     | mapear                          |
+| Item.priceTableId            | pedido_item.codigo_erp_tabela_preco            | number             | varchar(20)       | ⚠️ tipo difere     | converter                       |
+| Item.priceTableName          | tabela_preco.descricao                         | string             | varchar(100)      | 🔶 derivado        | calcular (JOIN)                 |
+| Item.priceTableValidity      | tabela_preco_item.validade_inicial/final       | string             | date              | 🔶 derivado        | calcular                        |
+| Item.quantity                | pedido_item.quantidade_informada               | number             | numeric(15,4)     | ⚠️ nome difere     | mapear                          |
+| Item.salePrice               | pedido_item.preco_venda_praticado_digitado     | number             | numeric(15,4)     | ⚠️ nome difere     | mapear                          |
+| Item.discountAmount          | pedido_item.valor_desconto_comercial           | number             | numeric(15,4)     | ⚠️ nome difere     | mapear                          |
+| Item.total                   | pedido_item.valor_total_produtos_liquido       | number             | numeric(15,4)     | ⚠️ nome difere     | mapear                          |
+| Item.observation             | pedido_item.observacao_item                    | string             | text              | ⚠️ nome difere     | mapear                          |
+| Lista.numero                 | pedido.nosso_codigo_pedido                     | string             | varchar(20)       | ⚠️ nome difere     | mapear                          |
+| Lista.tipo                   | pedido.e_um_orcamento                          | string             | boolean           | ⚠️ tipo difere     | converter                       |
+| Lista.cliente_nome           | cliente.nome_razao_social                      | string             | varchar(100)      | 🔶 derivado        | calcular (JOIN)                 |
+| Lista.data_emissao           | pedido.data_emissao                            | string             | date              | ✅ bate            | mapear                          |
+| Lista.status                 | pedido.situacao_pedido                         | string             | char(2)           | ⚠️ tipo difere     | converter                       |
+| Lista.total_liquido          | pedido_item.valor_total_produtos_liquido (soma)| number             | numeric(15,4)     | 🔶 derivado        | calcular (soma itens)           |
+
+2) DIVERGÊNCIAS CRÍTICAS
+--------------------------------------------------------------------------------
+- situacao_pedido (char 2) → strings do front. Comentário do schema NÃO cobre
+  em_digitacao nem aguardando_aprovacao. Possivelmente situacao_bloqueio (10..24)
+  cobre "aguardando aprovação". Investigação crítica.
+- Totais do pedido não existem pré-calculados. Backend deve recalcular.
+- deliveryDate: capa ou item? Banco tem data_entrega por item.
+- Endereços do pedido são strings (identificacao_endereco) em pedido, não FK.
+- product.* quase todo derivado — front espera objeto completo, banco tem
+  item + item_estoque + tabela_preco_item + unidade_medida. JOINs pesados.
+- customerCode do item sem origem. ❌ investigar.
+- type (pedido/orcamento) é boolean no banco, mas front tem rotas separadas.
+
+3) OPERAÇÕES NECESSÁRIAS (ENDPOINTS)
+--------------------------------------------------------------------------------
+| Operação                  | Método + rota                | Tabela(s)                                                              | JOINs        | Cálculos                          | Obs                              |
+|---------------------------|------------------------------|------------------------------------------------------------------------|--------------|-----------------------------------|----------------------------------|
+| Listar pedidos            | GET /pedidos                 | pedido, cliente                                                        | sim          | cliente_nome, total_liquido, status| SCROLL NOVO                      |
+| Listar orçamentos         | GET /orcamentos              | idem                                                                   | sim          | idem                              | ou GET /pedidos?tipo=orcamento   |
+| Obter detalhe             | GET /pedidos/{id}            | pedido, pedido_item, item, item_estoque, unidade_medida, tabela_preco_it| sim (múlt.)  | totals, product.*, status         |                                  |
+| Criar/salvar              | POST /pedidos                | pedido, pedido_item                                                    | não          | totals no backend                 | front usa POST mesmo p/ edição   |
+| Deletar                   | DELETE /pedidos/{id}         | pedido, pedido_item                                                    | não          | —                                 | soft delete? decidir             |
+| Obter endereços do cliente| GET /clientes/{customerId}/enderecos | cliente_endereco_adicional                                  | não          | —                                 | reuso do domínio cliente         |
+
+4) PENDÊNCIAS DE INVESTIGAÇÃO
+--------------------------------------------------------------------------------
+- Mapeamento situacao_pedido → em_digitacao/aguardando_aprovacao/aprovado/
+  cancelado. Comentário do schema não cobre. BLOQUEIO CRÍTICO.
+- customerCode do item: qual campo do banco?
+- deliveryDate: capa ou item?
+- Endereços do pedido: expor como codigo (FK) ou identificacao_endereco?
+- type: rotas separadas ou uma só?
+- Edição: front usa POST; decidir se API suporta PUT/PATCH.
+
+
+================================================================================
+### RESUMO GERAL
+================================================================================
+
+TABELA CONSOLIDADA DE GAPS
+--------------------------------------------------------------------------------
+| Domínio        | Campos faltando no banco                              | Campos faltando no front          | Regras a implementar                                                            |
+|----------------|-------------------------------------------------------|-----------------------------------|---------------------------------------------------------------------------------|
+| auth           | token (esperado — JWT)                                | usuario.tipo                      | resolver empresa_padrao para SET LOCAL app.cod_empresa                          |
+| catalogo       | —                                                     | —                                 | familia, unidade, preco_venda, tabela_preco_padrao; vigencia ambígua            |
+| cliente        | userNotes, lastVisit, lastAttendance, purchaseStatus  | cliente.regiao, codigo_erp_*      | status, purchaseStatus, addressSummary, fullAddress, lastOrder; PF/PJ, ERP      |
+| contas-receber | situacao (derivada)                                   | —                                 | situacao = aberto/vencido/pago; filtro codigo_erp_cliente + sessão              |
+| empresa        | region                                                | empresa.* (endereço, slug, plano) | —                                                                               |
+| home           | pendingAgendas, pendingTasks, unreadNotifications     | —                                 | 6 contadores derivados de pedido/cliente; 3 sem origem                          |
+| notificacoes   | TABELA AUSENTE                                        | —                                 | criar ou derivar                                                                |
+| pedido         | customerCode (item), totals (derivado)                | situacao_bloqueio, pedido_historico| mapear situacao_pedido; calcular totals; converter códigos ERP                  |
+
+TABELA DE ENDPOINTS PROPOSTA
+--------------------------------------------------------------------------------
+| Método | Rota                                    | Domínio        | Fonte                                                    | Complexidade   |
+|--------|-----------------------------------------|----------------|----------------------------------------------------------|----------------|
+| POST   | /auth/login                             | auth           | usuario, usuario_empresa, empresa                        | Média          |
+| GET    | /empresas                               | catalogo       | empresa                                                  | Baixa          |
+| GET    | /condicoes-pagamento                    | catalogo       | condicao_pagamento                                       | Baixa          |
+| GET    | /formas-pagamento                       | catalogo       | forma_pagamento                                          | Baixa          |
+| GET    | /transportadoras                        | catalogo       | transportadora                                           | Baixa          |
+| GET    | /tabelas-preco                          | catalogo       | tabela_preco                                             | Baixa          |
+| GET    | /produtos                               | catalogo       | item, unidade_medida                                     | Média          |
+| GET    | /clientes                               | cliente        | cliente                                                  | Média (scroll) |
+| GET    | /clientes/{id}                          | cliente        | cliente, cliente_endereco_adicional, cliente_conta_receber| Alta          |
+| POST   | /clientes                               | cliente        | cliente, cliente_endereco_adicional                      | Média          |
+| PUT    | /clientes/{id}                          | cliente        | idem                                                     | Média          |
+| DELETE | /clientes/{id}                          | cliente        | cliente                                                  | Baixa          |
+| GET    | /clientes/cnpj/{taxId}                  | cliente        | externo                                                  | Baixa          |
+| GET    | /clientes/{id}/enderecos                | cliente        | cliente_endereco_adicional                               | Baixa          |
+| POST   | /clientes/{id}/enderecos                | cliente        | idem                                                     | Baixa          |
+| DELETE | /clientes/{id}/enderecos/{addressId}    | cliente        | idem                                                     | Baixa          |
+| GET    | /cep/{zipCode}                          | cliente        | externo                                                  | Baixa          |
+| GET    | /clientes/{id}/contas-receber           | contas-receber | cliente_conta_receber                                    | Média          |
+| GET    | /shell/empresa                          | empresa        | empresa, usuario                                         | Baixa          |
+| GET    | /shell/notificacoes                     | notificacoes   | TABELA AUSENTE                                           | Bloqueado      |
+| GET    | /home/indicadores                       | home           | pedido, pedido_item, cliente                             | Alta           |
+| GET    | /notificacoes                           | notificacoes   | TABELA AUSENTE                                           | Bloqueado      |
+| GET    | /pedidos                                | pedido         | pedido, cliente                                          | Alta (scroll)  |
+| GET    | /orcamentos                             | pedido         | idem                                                     | Alta           |
+| GET    | /pedidos/{id}                           | pedido         | pedido, pedido_item, item, item_estoque, unidade_medida, tabela_preco_item, cliente | Alta |
+| POST   | /pedidos                                | pedido         | pedido, pedido_item                                      | Alta           |
+| DELETE | /pedidos/{id}                           | pedido         | pedido, pedido_item                                      | Média          |
+| GET    | /clientes/{customerId}/enderecos        | pedido         | cliente_endereco_adicional                               | Baixa (reuso)  |
+
+BLOQUEIOS ANTES DE GERAR OPENAPI
+--------------------------------------------------------------------------------
+ 1. Mapeamento situacao_pedido (char 2) → em_digitacao/aguardando_aprovacao/
+    aprovado/cancelado. Comentário do schema NÃO cobre. BLOQUEIO CRÍTICO.
+ 2. Tabela de notificações: criar ou derivar? Define /notificacoes e
+    /shell/notificacoes.
+ 3. Indicadores da Home: pendingAgendas, pendingTasks, unreadNotifications —
+    criar tabelas ou remover da Home?
+ 4. empresa.region: criar coluna, derivar de estado, ou remover do front?
+ 5. purchaseStatus do cliente: qual regra?
+ 6. userNotes do cliente: criar coluna ou usar cliente_campo_adicional?
+ 7. lastVisit / lastAttendance: criar tabela de visita/atendimento ou remover?
+ 8. tipo_endereco='residencial': remover do front ou mapear para A?
+ 9. Conversão codigo_erp_* → codigo: backend resolve via JOIN ou front usa ERP?
+10. tabela_preco.vigencia: qual campo do banco?
+11. title do título (contas a receber): titulo_numero_documento ou
+    titulo_especie_documento?
+12. customerCode do item de pedido: qual campo do banco?
+13. deliveryDate do pedido: capa ou item?
+14. Edição de pedido: POST ou PUT?
+15. Scroll infinito: definir estratégia (offset/limit vs cursor). Front não usa
+    hoje; requisito NOVO.
+
+TABELAS DO SCHEMA NÃO MAPEADAS NO INVENTÁRIO
+--------------------------------------------------------------------------------
+| Tabela                                                | Aparece no inventário? | Classificação                              |
+|-------------------------------------------------------|------------------------|--------------------------------------------|
+| revendedor                                            | Não                    | Infra / white-label                        |
+| tenant                                                | Não                    | Infra / multi-tenant                       |
+| log_auditoria                                         | Não                    | Infra / auditoria                          |
+| flyway_schema_history                                 | Não                    | Infra / migração                           |
+| usuario                                               | Parcial (shell)        | Domínio auth — mapeado                     |
+| usuario_empresa                                       | Não                    | Infra / sessão — usado no login            |
+| categoria_item                                        | Não                    | Catálogo mestre — não exposto              |
+| classificacao_fiscal                                  | Não                    | Fiscal — não exposto                       |
+| cliente_campo_adicional                               | Não                    | Extensão do cliente — candidato p/ userNotes|
+| cliente_condicao_pagamento                            | Não                    | N:N — usado indiretamente                  |
+| cliente_contato                                       | Não                    | Contatos — front usa inline em cliente     |
+| cliente_forma_pagamento                               | Não                    | N:N — usado indiretamente                  |
+| cliente_imposto                                       | Não                    | Fiscal — não exposto                       |
+| cliente_representante                                 | Não                    | N:N — não exposto                          |
+| cliente_rota_simples                                  | Não                    | Rota — não exposto                         |
+| cliente_tabela_preco                                  | Não                    | N:N — usado indiretamente                  |
+| condicao_pagamento_forma                              | Não                    | N:N — usado indiretamente                  |
+| condicao_pagamento_parcela                            | Não                    | Parcelas — usado indiretamente             |
+| condicao_pagamento_unidade                            | Não                    | N:N — usado indiretamente                  |
+| customizador_dados                                    | Não                    | Relatórios customizados — não exposto      |
+| embalagem_venda                                       | Não                    | Catálogo — usado em pedido_item            |
+| equipe_venda (+ _categoria, _item)                    | Não                    | Comercial — não exposto                    |
+| fabricante                                            | Não                    | Catálogo mestre — usado via item           |
+| forma_pagamento_unidade_negocio                       | Não                    | N:N — usado indiretamente                  |
+| grupo_cliente                                         | Não                    | Comercial — usado via cliente              |
+| item_campo_adicional                                  | Não                    | Extensão de item — não exposto             |
+| item_embalagem_venda                                  | Não                    | Catálogo — usado indiretamente             |
+| item_estoque                                          | Não                    | Usado em product.stock do pedido           |
+| item_imposto                                          | Não                    | Fiscal — não exposto                       |
+| item_unidade_negocio                                  | Não                    | N:N — usado indiretamente                  |
+| pedido_historico                                      | Não                    | Candidato para notificações                |
+| ramo_atividade                                        | Não                    | Catálogo mestre — usado via cliente        |
+| representante (+ _supervisor, _tipo_venda)            | Não                    | Comercial — não exposto                    |
+| risco_cliente                                         | Não                    | Financeiro — usado via cliente             |
+| rota_simples                                          | Não                    | Logística — não exposto                    |
+| tabela_preco_cliente                                  | Não                    | N:N — usado indiretamente                  |
+| tabela_preco_condicao_pagamento                       | Não                    | N:N — usado indiretamente                  |
+| tabela_preco_grupo_cliente                            | Não                    | N:N — usado indiretamente                  |
+| tabela_preco_item                                     | Não                    | Usado em product.preco_venda/validity      |
+| tabela_preco_representante                            | Não                    | N:N — usado indiretamente                  |
+| tabela_preco_tipo_venda                               | Não                    | N:N — usado indiretamente                  |
+| tabela_preco_unidade_negocio                          | Não                    | N:N — usado indiretamente                  |
+| tipo_frete                                            | Não                    | Catálogo — usado via pedido                |
+| tipo_venda (+ _condicao_pagamento, _unidade_negocio)  | Não                    | Comercial — usado via pedido               |
+| unidade_medida                                        | Não                    | Usado em product.unit                      |
+| unidade_negocio                                       | Não                    | Filial — usada em item_estoque             |
+
+--------------------------------------------------------------------------------
+FIM DO RELATÓRIO
+--------------------------------------------------------------------------------

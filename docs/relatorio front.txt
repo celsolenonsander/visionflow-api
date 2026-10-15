@@ -1,0 +1,950 @@
+Vou primeiro verificar os caminhos solicitados, identificar domínios adicionais fora de `src/features` e ler as instruções aplicáveis; depois rastrearei tipos, mocks e usos da API em cada superfície pedida.
+
+Ran terminal command: $paths = @('src\features\auth','src\features\cliente','src\features\home','src\features\pedido','src\mocks','src\core\api','src\core\shell','src\App.tsx'); foreach ($path in $paths) { [pscustomobject]@{Path=$path; Exists=(Test-Path -LiteralPath $path)} }; Write-Output '--- Other feature domains ---'; Get-ChildItem -LiteralPath 'src\features' -Directory | Where-Object { $_.Name -notmatch '\(copy\)' } | Select-Object -ExpandProperty Name; Write-Output '--- Source top-level ---'; Get-ChildItem -LiteralPath 'src' -Force | Select-Object Name,Mode
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\.github\\instructions\\typescript.instructions.md"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\.github\\instructions\\cliente.instructions.md"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\.github\\instructions\\home.instructions.md"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\.github\\instructions\\pedido.instructions.md"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\.github\\instructions\\json.instructions.md"
+}
+
+Ran terminal command: $roots = @('src\features\auth','src\features\cliente','src\features\home','src\features\pedido','src\mocks','src\core\api','src\core\shell','src\App.tsx'); foreach ($root in $roots) { Write-Output "--- $root ---"; Get-ChildItem -LiteralPath $root -File -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notmatch '\(copy\)' -and $_.FullName -notmatch '\\(node_modules|dist|build)\\' } | ForEach-Object { '{0}`t{1}' -f $_.FullName.Substring((Get-Location).Path.Length+1), (Get-Content -LiteralPath $_.FullName | Measure-Object -Line).Lines } }
+
+Search for `(fetch\(|apiClient|Repository|interface |type |async |useEffect|loading|error...`
+
+Search for `"[a-zA-Z][a-zA-Z0-9_]*"\s*:`
+
+Ran terminal command: git status --short
+
+Ran terminal command: $roots = @('src\features\auth','src\features\cliente','src\features\home','src\features\pedido','src\mocks','src\core\api','src\core\shell','src\App.tsx'); foreach ($root in $roots) { Write-Output "--- $root ---"; Get-ChildItem -LiteralPath $root -File -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notmatch '\(copy\)' -and $_.FullName -notmatch '\\(node_modules|dist|build)\\' } | ForEach-Object { $_.FullName.Substring((Get-Location).Path.Length+1) } }
+
+Ran terminal command: $files = Get-ChildItem -LiteralPath 'src\mocks' -File -Recurse | Where-Object { $_.FullName -notmatch '\(copy\)' }; foreach ($file in $files) { $json = Get-Content -LiteralPath $file.FullName -Raw | ConvertFrom-Json; [pscustomobject]@{File=$file.FullName.Substring((Get-Location).Path.Length+1); Properties=($json | ConvertTo-Json -Depth 30 -Compress)} } | Format-List
+Tool execution failed with exit code 1
+
+Search for `(export (interface|type|enum|class|const)|interface |type |enum |async (funct...`
+
+Ran terminal command: $roots = @('src\features\auth','src\features\cliente','src\features\home','src\features\pedido','src\core\api','src\core\shell'); foreach ($root in $roots) { Write-Output "--- $root ---"; Get-ChildItem -LiteralPath $root -File -Recurse | Where-Object { $_.Extension -in '.ts','.tsx' -and $_.FullName -notmatch '\(copy\)' } | ForEach-Object { $_.FullName.Substring((Get-Location).Path.Length+1) } }; Write-Output '--- App ---'; Write-Output 'src\App.tsx'
+
+Find files matching `src/features/auth/**/*.{ts,tsx}`
+
+Find files matching `src/features/cliente/**/*.{ts,tsx}`
+
+Find files matching `src/features/home/**/*.{ts,tsx}`
+
+Find files matching `src/features/pedido/**/*.{ts,tsx}`
+
+Find files matching `src/core/shell/**/*.{ts,tsx}`
+
+Find files matching `src/mocks/**/*.json`
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\core\\api\\apiClient.ts"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\App.tsx"
+}
+
+Todos os caminhos solicitados existem. O levantamento também encontrou mocks/domínios auxiliares fora de `src/features` (catálogos, recados e dados da empresa), usados especialmente pelo fluxo de pedidos e pelo shell; vou rastrear onde cada um é consumido para separar contrato de domínio de estrutura.
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\auth\\domain\\entities\\Usuario.ts"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\auth\\domain\\repositories\\AuthRepository.ts"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\auth\\data\\repositories\\ApiAuthRepository.ts"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\auth\\data\\repositories\\MockAuthRepository.ts"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\cliente\\domain\\entities\\Cliente.ts"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\cliente\\domain\\entities\\Endereco.ts"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\cliente\\domain\\entities\\Titulo.ts"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\cliente\\domain\\repositories\\ClienteRepository.ts"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\cliente\\data\\repositories\\ApiClienteRepository.ts"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\cliente\\data\\repositories\\MockClienteRepository.ts"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\home\\domain\\entities\\Indicador.ts"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\home\\domain\\entities\\Aviso.ts"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\home\\domain\\repositories\\HomeRepository.ts"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\home\\data\\repositories\\ApiHomeRepository.ts"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\home\\data\\repositories\\MockHomeRepository.ts"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\home\\presentation\\viewmodels\\useHomeViewModel.ts"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\core\\shell\\domain\\entities\\ShellData.ts"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\core\\shell\\domain\\repositories\\ShellRepository.ts"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\core\\shell\\data\\repositories\\ApiShellRepository.ts"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\core\\shell\\data\\repositories\\MockShellRepository.ts"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\pedido\\domain\\entities\\Pedido.ts"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\pedido\\domain\\entities\\ItemPedido.ts"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\pedido\\domain\\entities\\PedidoTipo.ts"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\pedido\\domain\\repositories\\PedidoRepository.ts"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\pedido\\data\\repositories\\ApiPedidoRepository.ts"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\pedido\\presentation\\viewmodels\\usePedidoListaViewModel.ts"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\pedido\\presentation\\viewmodels\\usePedidoEditorViewModel.ts"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\pedido\\presentation\\viewmodels\\usePedidoViewModel.ts"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\pedido\\presentation\\listScroll.ts"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\cliente\\presentation\\listScroll.ts"
+}
+
+Read , lines 1 to 150
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\pedido\\data\\repositories\\ApiPedidoRepository.ts",
+  "view_range": [
+    1,
+    150
+  ]
+}
+
+Read , lines 151 to 300
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\pedido\\data\\repositories\\ApiPedidoRepository.ts",
+  "view_range": [
+    151,
+    300
+  ]
+}
+
+Read , lines 1 to 160
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\pedido\\data\\repositories\\MockPedidoRepository.ts",
+  "view_range": [
+    1,
+    160
+  ]
+}
+
+Read , lines 161 to 320
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\pedido\\data\\repositories\\MockPedidoRepository.ts",
+  "view_range": [
+    161,
+    320
+  ]
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\pedido\\presentation\\pages\\PedidoListaPage.tsx"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\cliente\\presentation\\viewmodels\\useClienteViewModel.ts"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\cliente\\presentation\\viewmodels\\useClienteEditorViewModel.ts"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\cliente\\presentation\\viewmodels\\useEnderecoModalViewModel.ts"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\cliente\\presentation\\viewmodels\\useEnderecoViewModel.ts"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\cliente\\presentation\\pages\\ClienteListaPage.tsx"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\core\\shell\\useShellViewModel.ts"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\core\\shell\\AppShell.tsx"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\core\\shell\\AppTopBar.tsx"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\auth\\presentation\\components\\RequireAuth.tsx"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\auth\\presentation\\stores\\useAuthStore.ts"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\main.tsx"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\core\\theme\\ThemeProvider.tsx"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\home\\presentation\\components\\HomeAvisos.tsx"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\home\\presentation\\pages\\HomePage.tsx"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\pedido\\domain\\validators\\pedidoSchema.ts"
+}
+
+Ran terminal command: $rows = foreach ($file in (Get-ChildItem -LiteralPath 'src\mocks' -File -Recurse | Where-Object { $_.FullName -notmatch '\(copy\)' })) { $json = Get-Content -LiteralPath $file.FullName -Raw | ConvertFrom-Json; $data = $json.data; $summary = if ($data -is [System.Array]) { 'count=' + $data.Count + '; first=' + ($data | Select-Object -First 1 | ConvertTo-Json -Depth 20 -Compress) } else { ConvertTo-Json -InputObject $data -Depth 20 -Compress }; [pscustomobject]@{File=$file.FullName.Substring((Get-Location).Path.Length+1); Success=$json.success; Error=($json.error | ConvertTo-Json -Compress); Data=$summary} }; $rows | Format-List
+
+Search for `apiRequest<|apiRequest\(`
+
+Search for `IntersectionObserver|nextCursor|hasMore|nextPage|pageSize|load more|Carregar ...`
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\cliente\\domain\\validators\\clienteSchema.ts"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\cliente\\domain\\validators\\enderecoSchema.ts"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\cliente\\presentation\\components\\editor\\AbaDadosGerais.tsx"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\cliente\\presentation\\components\\editor\\AbaPadroes.tsx"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\cliente\\presentation\\components\\editor\\AbaTitulos.tsx"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\cliente\\presentation\\components\\editor\\AbaOutros.tsx"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\cliente\\presentation\\components\\editor\\AbaEnderecos.tsx"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\pedido\\domain\\services\\PedidoTotais.ts"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\cliente\\presentation\\components\\editor\\ClienteEditorForm.tsx"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\cliente\\presentation\\pages\\ClienteEditorPage.tsx"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\cliente\\presentation\\components\\editor\\EnderecoModalFields.tsx"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\cliente\\presentation\\components\\editor\\AbaDadosGerais.tsx"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\cliente\\presentation\\components\\editor\\EnderecoCard.tsx"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\pedido\\presentation\\components\\editor\\AbaDadosGerais.tsx"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\pedido\\presentation\\components\\editor\\AbaFinalizacao.tsx"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\pedido\\presentation\\components\\editor\\PedidoTotais.tsx"
+}
+
+"Read" failed
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\pedido\\presentation\\components\\modais\\ProductPickerFields.tsx"
+}
+Tool execution failed: Path does not exist
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\home\\presentation\\components\\HomeAvisoContent.tsx"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\pedido\\presentation\\components\\editor\\PedidoClienteFields.tsx"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\pedido\\presentation\\components\\editor\\AbaProdutos.tsx"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\pedido\\presentation\\components\\editor\\PedidoEditorForm.tsx"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\pedido\\presentation\\components\\modais\\ProdutoPickerFields.tsx"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\pedido\\presentation\\components\\modais\\ItemAdditionalData.tsx"
+}
+
+"Read" failed
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\pedido\\presentation\\components\\list\\PedidoCard.tsx"
+}
+Tool execution failed: Path does not exist
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\pedido\\presentation\\components\\lista\\PedidoCard.tsx"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\auth\\presentation\\viewmodels\\useAuthViewModel.ts"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\auth\\domain\\validators\\loginSchema.ts"
+}
+
+Read 
+Completed with input: {
+  "path": "D:\\VisionFlow\\VisionFlow\\src\\features\\pedido\\domain\\validators\\itemPedidoSchema.ts"
+}
+
+Ran terminal command: $files = Get-ChildItem -LiteralPath 'src\mocks' -File -Recurse | Where-Object { $_.FullName -notmatch '\(copy\)' }; foreach ($file in $files) { $json = Get-Content -LiteralPath $file.FullName -Raw | ConvertFrom-Json; $data = $json.data; if ($data -is [System.Array]) { $sample = $data | Select-Object -First 1; $keys = if ($sample) { ($sample.PSObject.Properties.Name -join ', ') } else { '' }; $type = 'array[' + $data.Count + ']' } else { $keys = $data.PSObject.Properties.Name -join ', '; $type = 'object' }; '{0}: {1} {{{2}}}' -f $file.FullName.Substring((Get-Location).Path.Length+1), $type, $keys }
+
+Search for `^export interface|^export type|^export enum|^interface Api|apiRequest|^export...`
+
+Search for `(useEffect\(|setLoading\(|setError\(|setLoading\(false\)|VfEmpty|VfError|savi...`
+
+Search for `(logo|Logo|data-shell-content|<ErrorBoundary|ErrorBoundary|Toast|toast|Provider)`
+
+Ran terminal command: $files = @('src\features\auth\domain\entities\Usuario.ts','src\features\cliente\domain\entities\Cliente.ts','src\features\cliente\domain\entities\Endereco.ts','src\features\cliente\domain\entities\Titulo.ts','src\features\pedido\domain\entities\Pedido.ts','src\features\pedido\domain\entities\ItemPedido.ts','src\features\pedido\domain\entities\PedidoTipo.ts','src\features\home\domain\entities\Indicador.ts','src\features\home\domain\entities\Aviso.ts','src\core\shell\domain\entities\ShellData.ts'); foreach ($file in $files) { Write-Output "--- $file ---"; $i=0; Get-Content -LiteralPath $file | ForEach-Object { $i++; if ($_ -match '^\s*(export\s+)?(interface|type|enum)\b|^\s*[A-Za-z][A-Za-z0-9]*\??:') { '{0}: {1}' -f $i, $_ } } }
+
+Search for `(apiRequest|async (list|getById|save|delete|lookupTaxId|getAddresses|saveAddr...`
+
+Ran terminal command: $files = @('src\mocks\auth\login.json','src\mocks\home\indicadores.json','src\mocks\notificacoes\listar.json','src\mocks\shell\empresa.json','src\mocks\shell\notificacoes.json','src\mocks\clientes\listar.json','src\mocks\clientes\24129\enderecos.json','src\mocks\clientes\cnpj\61186888000193.json','src\mocks\pedido\listar.json','src\mocks\pedido\detalhe_1001.json','src\mocks\empresas\listar.json','src\mocks\condicoes_pagamento\listar.json','src\mocks\formas_pagamento\listar.json','src\mocks\transportadoras\listar.json','src\mocks\tabelas_preco\listar.json','src\mocks\produtos\listar.json'); foreach ($file in $files) { $line = 0; Get-Content -LiteralPath $file | ForEach-Object { $line++; if ($_ -match '"(success|data|error|id|usuario|nome|vendas_mes|vendas_hoje|pedidos_em_digitacao|orcamentos_em_digitacao|clientes_em_digitacao|pedidos_aguardando_aprovacao|agendas_pendentes|tarefas_pendentes|notificacoes_nao_lidas|nao_lidas|titulo|lida|data|cnpj|regional|contato|tipo|status|numero|cliente_nome|total_liquido|itens|totais|codigo|descricao|vigencia|preco_venda|cpf_cnpj|tipo_pessoa|endereco_resumo|endereco_completo|cep|logradouro|finalidade|razao_social)"') { '{0}:{1}: {2}' -f $file,$line,$_ } } }
+
+Search for `(type ApiErrorBody|type ApiEnvelope|useApiRepository|getApiBaseUrl|readStored...`
+
+## Domínios encontrados e escopo
+
+Os caminhos solicitados existem. Não encontrei outros módulos de feature fora de `src/features` além de `auth`, `cliente`, `home` e `pedido`; há, porém, domínios consumidos fora dessa árvore: dados da empresa e contador de avisos do shell, além de catálogos mockados usados pelo cadastro de clientes e pelo editor de pedidos. As rotas de agenda, tarefas, geolocalização, dashboard e notificações estão ligadas a páginas placeholder, sem operações de dados identificadas no escopo analisado (`App.tsx:22-39`).
+
+> Nos campos agrupados abaixo, cada nome mantém seu tipo e sua obrigatoriedade conforme entidade ou uso no formulário. `[inferido]` identifica campo deduzido pelo uso; `[mock ausente]` identifica dado usado pelo front sem correspondente no mock atual; `[só no mock]` identifica dado existente no mock, mas ignorado pelo front.
+
+---
+
+### Domínio: Autenticação
+
+**1. Entidades e campos**
+
+| Entidade | Campo | Tipo | Obrigatório | Evidência (arquivo:linha) | Obs |
+|---|---|---|---|---|---|
+| Credenciais | `email: string`; `password: string` | string | Sim | `Usuario.ts:8-10` | Enviados como `email` e `senha` no corpo do login (`ApiAuthRepository.ts:15-22`). |
+| Usuário autenticado | `id: number`; `name: string`; `email: string`; `token: string` | number; string | Sim | `Usuario.ts:1-6` | A resposta wire esperada é `usuario: { id, nome, email, token }`; `nome` é mapeado para `name` (`ApiAuthRepository.ts:5-11, 24-29`). |
+
+**2. Operações**
+
+| Operação | Endpoint chamado | Carregamento | Evidência | Obs |
+|---|---|---|---|---|
+| Autenticar | `POST /auth/login` | sob demanda | `ApiAuthRepository.ts:15-22` | Ação de submissão do formulário. Não há chamada visível a `/auth/logout`; sair limpa a sessão local (`AppTopBar.tsx:45-61, 71-85`). |
+
+**3. Formatos esperados**
+
+| Item | Formato | Evidência | Obs |
+|---|---|---|---|
+| ID e token | ID numérico; token string | `Usuario.ts:1-6` | O mock de login contém ambos (`login.json`). |
+| E-mail e senha | E-mail validado; senha string não vazia | `loginSchema.ts:3-7` | |
+| Erro de login | O ViewModel exibe `Error.message`; fallback é string de erro | `useAuthViewModel.ts:49-65` | O código do erro não integra o modelo de usuário. |
+
+**4. Padrões de listagem**
+
+Não há listas neste domínio.
+
+**5. Estados de UI dependentes de campos**
+
+| Estado | Campo(s) que o determina | Evidência | Obs |
+|---|---|---|---|
+| Loading/disabled | `loading` | `useAuthViewModel.ts:49-65`, `LoginSubmitButton.tsx:8-14` | Durante o envio, o botão fica desabilitado. |
+| Error | `error` / `Error.message` | `useAuthViewModel.ts:59-62` | |
+| Validação | `email`, `password` | `loginSchema.ts:3-7` | |
+
+---
+
+### Domínio: Avisos e notificações
+
+**1. Entidades e campos**
+
+| Entidade | Campo | Tipo | Obrigatório | Evidência (arquivo:linha) | Obs |
+|---|---|---|---|---|---|
+| Aviso apresentado na Home | `id: number`; `title: string`; `date: string` | number; string | Sim | `Aviso.ts:1-5` | Mapeado de `id`, `titulo`, `data`; só notificações com `lida === false` entram na lista (`ApiHomeRepository.ts:14-19, 42-51`). |
+| Notificação wire | `id: number`; `titulo: string`; `lida: boolean`; `data: string` | number; string; boolean | Sim | `ApiHomeRepository.ts:14-19` | O mock contém esses campos (`listar.json`). |
+| Contador do shell | `nao_lidas: number` | number | Sim | `ApiShellRepository.ts:20-22` | Endpoint separado para o badge do shell. |
+
+**2. Operações**
+
+| Operação | Endpoint chamado | Carregamento | Evidência | Obs |
+|---|---|---|---|---|
+| Listar avisos não lidos | `GET /notificacoes` | sob demanda | `ApiHomeRepository.ts:42-51`, `useHomeViewModel.ts:52-69` | Carregada quando a rota Home monta; filtro de não lidas no cliente. |
+| Obter contagem | `GET /shell/notificacoes` | boot | `ApiShellRepository.ts:22-25`, `useShellViewModel.ts:24-26` | Carregada pelo provider/layout root autenticado. **Existe endpoint separado apenas para contagem/badge.** |
+
+**3. Formatos esperados**
+
+| Item | Formato | Evidência | Obs |
+|---|---|---|---|
+| ID, lida e contador | ID number; `lida` boolean; contador number | `ApiHomeRepository.ts:14-19`, `ApiShellRepository.ts:20-22` | |
+| Data | String; mock usa timestamp ISO 8601 UTC | `listar.json` | A Home formata para dia/mês (`pt-BR`) antes de exibir (`useHomeViewModel.ts:15-16, 64-68`). |
+| Erros | String exibida pela Home; erro do shell é substituído por mensagem fixa | `useHomeViewModel.ts:69-72`, `useShellViewModel.ts:31-35` | |
+
+**4. Padrões de listagem**
+
+- **Nome da lista:** Avisos não lidos da Home
+  - Estratégia: nenhuma; resposta completa, sem paginação.
+  - Como é disparada: carregamento automático ao montar a rota Home.
+  - Campos que o front espera do backend para paginar: nenhum.
+  - Tamanho de página no mock: 2 notificações no arquivo; a UI exibe até 2 itens.
+  - Evidência: `ApiHomeRepository.ts:42-51`, `HomeAvisoContent.tsx:27-39`, `listar.json`.
+  - Obs: o contador exibido na Home é `notifications.length`, calculado após filtrar lidas; não é o valor `Indicador.unreadNotifications`.
+
+**5. Estados de UI dependentes de campos**
+
+| Estado | Campo(s) que o determina | Evidência | Obs |
+|---|---|---|---|
+| Loading | `loading` | `HomeAvisos.tsx:12-20` | Renderiza skeleton. |
+| Empty | `notifications.length === 0` | `HomeAvisoContent.tsx:24-25` | Exibe estado “Tudo em ordem”. |
+| Badge/contador | `unreadNotifications` no shell; `notifications.length` na Home | `AppTopBar.tsx:27-38`, `HomeAvisoContent.tsx:27-30` | O link do shell leva à rota de notificações placeholder. |
+| Error | `error` | `HomePage.tsx:12-16` | Exibe `VfError` com retry. |
+
+---
+
+### Domínio: Catálogos auxiliares de pedido
+
+**1. Entidades e campos**
+
+| Entidade | Campo | Tipo | Obrigatório | Evidência (arquivo:linha) | Obs |
+|---|---|---|---|---|---|
+| Empresa para pedido | `id: number`; `nome: string` | number; string | Sim | `listar.json`, `MockPedidoRepository.ts:1-2, 61-65` | Mock de 1 empresa; `id` é usado como empresa padrão do rascunho. |
+| Condição de pagamento | `id: number`; `descricao: string` | number; string | Sim | `listar.json`, `AbaPadroes.tsx:31-33` | |
+| Forma de pagamento | `id: number`; `descricao: string` | number; string | Sim | `listar.json`, `AbaPadroes.tsx:32-34` | |
+| Transportadora | `id: number`; `nome: string` | number; string | Sim | `listar.json`, `AbaPadroes.tsx:30-32` | |
+| Tabela de preço | `id: number`; `nome: string`; `vigencia: string` | number; string | Sim | `listar.json`, `MockPedidoRepository.ts:83-98` | |
+| Produto de catálogo | `id: number`; `codigo: string`; `descricao: string`; `familia: string`; `marca: string`; `unidade: string`; `tabela_preco_padrao_id: number`; `preco_venda: number` | number; string | Sim | `listar.json`, `MockPedidoRepository.ts:83-98` | Catálogo importado do mock também quando a aplicação seleciona o repository API. |
+
+**2. Operações**
+
+| Operação | Endpoint chamado | Carregamento | Evidência | Obs |
+|---|---|---|---|---|
+| Listar catálogos | não visível | não aplicável | `MockPedidoRepository.ts:1-10, 83-98`, `AbaPadroes.tsx:1-4, 26-38` | Os dados são importados de JSONs locais; não há chamadas API visíveis para esses catálogos. `[mock ausente]` implementação de listagem via API. |
+
+**3. Formatos esperados**
+
+| Item | Formato | Evidência | Obs |
+|---|---|---|---|
+| IDs e valores | IDs number; preços number | `produtos/listar.json`, `MockPedidoRepository.ts:83-98` | Preço formatado como BRL (`pt-BR`) no seletor de produto (`ProdutoPickerFields.tsx:17-22`). |
+| Vigência da tabela | String; mock usa data `YYYY-MM-DD` | `tabelas_preco/listar.json` | |
+| Erros/loading/empty | Indeterminado para carregamento remoto | `MockPedidoRepository.ts:83-98` | Os catálogos são constantes importadas; não há estado de requisição. |
+
+**4. Padrões de listagem**
+
+- **Nome da lista:** Produtos para adicionar ao pedido
+  - Estratégia: nenhuma; o modal percorre o array local completo.
+  - Como é disparada: abertura do modal; pesquisa filtra localmente.
+  - Campos que o front espera do backend para paginar: nenhum.
+  - Tamanho de página no mock: 2 produtos.
+  - Evidência: `AbaProdutos.tsx:23-27`, `ProdutoPickerFields.tsx:17-22`, `listar.json`.
+  - Obs: o container tem scroll visual, mas não há paginação ou carregamento incremental.
+
+- **Nome da lista:** Clientes, empresas, condições, formas, transportadoras e tabelas usados como catálogos
+  - Estratégia: nenhuma; arrays mockados.
+  - Como é disparada: uso do editor de pedido ou dos combos de padrões do cliente.
+  - Campos que o front espera do backend para paginar: nenhum.
+  - Tamanho de página no mock: varia por arquivo; os mocks têm de 1 a 3 registros.
+  - Evidência: `MockPedidoRepository.ts:83-98`, `AbaPadroes.tsx:26-38`.
+  - Obs: `[mock ausente]` endpoints/API para esses arrays.
+
+**5. Estados de UI dependentes de campos**
+
+| Estado | Campo(s) que o determina | Evidência | Obs |
+|---|---|---|---|
+| Seleção | IDs dos registros e campos de descrição/nome | `AbaPadroes.tsx:15-23, 30-38` | IDs vazios são convertidos em `null`. |
+| Produto escolhido/preço | `id`, `descricao`, `codigo`, `marca`, `unidade`, `preco_venda`, `familia` | `ProdutoPickerFields.tsx:17-22` | |
+| Loading/error/empty | nenhum estado de carregamento remoto visível | `MockPedidoRepository.ts:83-98` | |
+
+---
+
+### Domínio: Cliente
+
+**1. Entidades e campos**
+
+| Entidade | Campo | Tipo | Obrigatório | Evidência (arquivo:linha) | Obs |
+|---|---|---|---|---|---|
+| Cliente | `id: number \| null`; `name`, `legalName`, `tradeName`, `taxId`, `stateRegistration`, `buyerContact`, `buyerEmail`, `billingContact`, `invoiceEmail`, `commercialPhone`, `mobilePhone`, `otherPhone`, `status`, `registrationStatus`, `purchaseStatus`, `openedAt`, `addressSummary`, `fullAddress`, `lastVisit`, `integrationId`, `userNotes`, `erpNotes: string` | IDs number/null; demais string | Sim; `id` nullable | `Cliente.ts:4-39` | Os campos cadastrais e de contato do editor não estão no mock de listagem nem no tipo de resposta usado para detalhe: `[mock ausente]`. O mapeador API os inicializa vazios, defaults ou derivados (`ApiClienteRepository.ts:66-105`). |
+| Cliente | `personType: 'PF' \| 'PJ'`; `indicatorColor: 'verde' \| 'vermelho'` | enums string | Sim | `Cliente.ts:10, 24` | |
+| Cliente | `prospect: boolean`; `creditLimit: number` | boolean; number | Sim | `Cliente.ts:19, 35` | `prospect` é derivado de `situacao_compra === 'sem_compra'` `[inferido]`; crédito é inicializado em zero pelo mapeador API. |
+| Cliente | `lastOrder`, `lastAttendance: string \| null` | string/null | Sim | `Cliente.ts:27-28` | |
+| Cliente | `carrierId`, `paymentConditionId`, `paymentMethodId`, `priceTableId: number \| null` | number/null | Sim | `Cliente.ts:29-32` | `[mock ausente]` no objeto de listagem; mapeador API define `null`. |
+| Cliente | `addresses: Endereco[]`; `titles: Titulo[]` | arrays | Sim | `Cliente.ts:38-39` | Endereços têm rota/método de leitura; títulos estão ausentes do mock e da resposta API atual `[mock ausente]`. |
+| Endereço | `id: number`; `type`, `purpose`, `zipCode`, `street`, `number`, `complement`, `district`, `city`, `state`, `reference`, `deliveryRestrictions: string` | number; strings | Sim | `Endereco.ts:1-16` | O formulário oferece tipos `entrega`, `cobranca`, `residencial` e finalidades `principal`, `secundario` (`EnderecoModalFields.tsx:15-20`). |
+| Título | `id: number`; `title`, `installment`, `documentType`, `series`, `issueDate`, `dueDate: string`; `openAmount: number` | number; strings | Sim | `Titulo.ts:1-10` | `[mock ausente]` no mock de clientes e na resposta tipada da API atual. |
+| Consulta CNPJ | `taxId`, `legalName`, `tradeName`, `stateRegistration`, `email`, `phone: string`; `address` com CEP/logradouro/número/complemento/bairro/cidade/estado | strings | Sim | `Cliente.ts:42-49` | A resposta usa `cnpj`, `razao_social`, `nome_fantasia`, `inscricao_estadual`, `telefone` e `endereco` (`ApiClienteRepository.ts:24-40`). |
+
+**2. Operações**
+
+| Operação | Endpoint chamado | Carregamento | Evidência | Obs |
+|---|---|---|---|---|
+| Listar clientes | `GET /clientes` | sob demanda | `ApiClienteRepository.ts:114-118`, `useClienteViewModel.ts:48-66` | Arrays completos; filtros/busca são locais. |
+| Obter cliente | `GET /clientes/{id}` | sob demanda | `ApiClienteRepository.ts:120-130`, `useClienteEditorViewModel.ts:45-62` | |
+| Criar | `POST /clientes` | sob demanda | `ApiClienteRepository.ts:132-160` | |
+| Editar | `PUT /clientes/{id}` | sob demanda | `ApiClienteRepository.ts:132-160` | O `save` constrói payload espalhando o objeto camelCase e também alguns nomes snake_case. |
+| Deletar | `DELETE /clientes/{id}` | sob demanda | `ApiClienteRepository.ts:162-164` | |
+| Consultar CNPJ | `GET /clientes/cnpj/{taxId}` | sob demanda | `ApiClienteRepository.ts:166-185` | Tax ID é sanitizado para dígitos antes da chamada. |
+| Listar endereços | `GET /clientes/{id}/enderecos` | sob demanda | `ApiClienteRepository.ts:188-197`, `useEnderecoViewModel.ts:28-44` | Ausente para cliente novo (`id === null`). O repository converte falhas em lista vazia. |
+| Salvar/excluir endereço | `POST /clientes/{id}/enderecos`; `DELETE /clientes/{id}/enderecos/{addressId}` | sob demanda | `ApiClienteRepository.ts:199-230` | Os métodos existem, mas o ViewModel de endereços altera estado local. O editor submete os endereços dentro do objeto cliente; não chama esses métodos diretamente (`ClienteEditorPage.tsx:29-32`, `useEnderecoViewModel.ts:47-72`). |
+| Consultar CEP | `GET /cep/{zipCode}` | sob demanda | `ApiClienteRepository.ts:232-246` | |
+
+**3. Formatos esperados**
+
+| Item | Formato | Evidência | Obs |
+|---|---|---|---|
+| IDs | Números; `id` de cliente pode ser `null` no rascunho; referências também nullable | `Cliente.ts:5, 29-32`, `Endereco.ts:2` | `integrationId` é string e é preenchido com `String(row.id)` `[inferido]` (`ApiClienteRepository.ts:88-90`). |
+| Datas | Strings sem validação rígida no schema; mock contém `YYYY-MM-DD` | `clienteSchema.ts:8-47`, `listar.json` | `issueDate`/`dueDate` dos títulos são strings; a UI compara vencimento com a data atual. |
+| Moeda e números | `creditLimit` e `openAmount` number; crédito não negativo; aberto formatado em BRL | `clienteSchema.ts:37`, `AbaTitulos.tsx:8-12` | |
+| Enums/strings | PF/PJ; indicador verde/vermelho; `status`, `registrationStatus` e `purchaseStatus` são string livre | `Cliente.ts:10, 20-24` | Valores vistos/filtrados incluem `aberto`, `bloqueado`, `em_digitacao` e `sem_compra` (`useClienteViewModel.ts:13-20, 70-89`). |
+| Booleanos | `prospect` boolean | `Cliente.ts:19` | |
+| Erros | String apresentada; para CEP/endereço, mensagem de `Error` ou fallback | `useClienteEditorViewModel.ts:79-84`, `useEnderecoModalViewModel.ts:17-35` | |
+
+**4. Padrões de listagem**
+
+- **Nome da lista:** Clientes
+  - Estratégia: nenhuma; recebe array completo.
+  - Como é disparada: automática ao montar a rota; busca e filtro são locais.
+  - Campos que o front espera do backend para paginar: nenhum.
+  - Tamanho de página no mock: 2 clientes.
+  - Evidência: `useClienteViewModel.ts:48-66, 68-89`, `listar.json`.
+  - Obs: não usa scroll infinito nem paginação.
+
+- **Nome da lista:** Endereços do cliente
+  - Estratégia: nenhuma; arrays completos.
+  - Como é disparada: automática ao montar editor existente.
+  - Campos que o front espera do backend para paginar: nenhum.
+  - Tamanho de página no mock: 1 endereço no arquivo disponível.
+  - Evidência: `useEnderecoViewModel.ts:28-44`, `enderecos.json`.
+  - Obs: endereços adicionados/alterados são mantidos localmente até o submit do cliente.
+
+- **Nome da lista:** Títulos
+  - Estratégia: nenhuma; array recebido no objeto cliente.
+  - Como é disparada: junto aos dados do cliente, se existir.
+  - Campos que o front espera do backend para paginar: nenhum.
+  - Tamanho de página no mock: nenhum título no mock atual.
+  - Evidência: `Titulo.ts:1-10`, `AbaTitulos.tsx:12-24`.
+  - Obs: `[mock ausente]` fonte de títulos; UI tem estado vazio.
+
+**5. Estados de UI dependentes de campos**
+
+| Estado | Campo(s) que o determina | Evidência | Obs |
+|---|---|---|---|
+| Loading | `loading` | `ClienteListaPage.tsx:26-36`, `AbaEnderecos.tsx:34-35` | Skeleton de cards/formulário/endereços. |
+| Empty | `visibleClients.length`, `enderecos.length`, `titulos.length` | `ClienteListaPage.tsx:30-36`, `AbaEnderecos.tsx:34-35`, `AbaTitulos.tsx:17-18` | |
+| Error | `error` | `useClienteViewModel.ts:48-59`, `useClienteEditorViewModel.ts:45-62` | Retry disponível nos estados que usam `VfError`. |
+| Disabled/saving | `saving` | `ClienteEditorPage.tsx:38-39` | Estado passado ao header. |
+| Validação | nome e telefone comercial não vazios; emails válidos quando preenchidos; limite não negativo; CEP/endereço requeridos | `clienteSchema.ts:3-47`, `enderecoSchema.ts:3-16` | |
+| Badge/contador | `titles` e vencimento determinam filtro “vencidos”; não há badge numérico de cliente | `useClienteViewModel.ts:84-88` | |
+
+---
+
+### Contas a receber do cliente (read-only)
+
+Origem: recorte do domínio de contas a receber do ERP.
+Uso: aba "Títulos" do editor de cliente, com destaque para vencidas.
+
+**Entidade exposta (DTO de leitura):**
+
+| Campo | Tipo | Origem |
+|---|---|---|
+| id | number | PK da conta a receber |
+| title | string | descrição/documento |
+| installment | string | "1/3", "2/3" |
+| documentType | string | NF, boleto, etc |
+| series | string | série do documento |
+| issueDate | string (YYYY-MM-DD) | emissão |
+| dueDate | string (YYYY-MM-DD) | vencimento |
+| openAmount | number | valor em aberto |
+| situacao | 'aberto' \| 'vencido' \| 'pago' | calculado pelo backend [NOVO] |
+
+**Operações:**
+| Operação | Endpoint | Carregamento |
+|---|---|---|
+| Listar contas a receber do cliente | GET /clientes/{id}/contas-receber | sob demanda (aba do editor) |
+
+**Regras de negócio:**
+- `situacao = 'vencido'` quando dueDate < hoje E não paga
+- `situacao = 'pago'` quando há baixa/liquidação
+- `situacao = 'aberto'` caso contrário
+- Ordenação: dueDate asc (vencidas primeiro)
+
+**Observação:** não é CRUD — apenas leitura. Escrita (baixa, cancelamento)
+fica fora do escopo desta API por enquanto.
+
+### Domínio: Empresa da sessão (shell)
+
+**1. Entidades e campos**
+
+| Entidade | Campo | Tipo | Obrigatório | Evidência (arquivo:linha) | Obs |
+|---|---|---|---|---|---|
+| Empresa do shell | `name`, `taxId`, `region`, `contact: string` | string | Sim | `ShellData.ts:1-6` | Correspondem a `nome`, `cnpj`, `regional`, `contato` no payload (`ApiShellRepository.ts:6-13`). |
+| Usuário reportado pelo shell | `id: number`; `name`, `email: string` | number; string | Sim | `ShellData.ts:8-12` | Vem no objeto `usuario_logado` da resposta de empresa. |
+| Dados agregados do shell | `company`, `loggedInUser`; `unreadNotifications: number` | objetos; number | Sim | `ShellData.ts:14-18` | Logo da empresa não aparece no tipo, mock, resposta tipada nem renderização `[mock ausente]` como dado consumido. |
+
+**2. Operações**
+
+| Operação | Endpoint chamado | Carregamento | Evidência | Obs |
+|---|---|---|---|---|
+| Obter dados da empresa/usuário | `GET /shell/empresa` | boot | `ApiShellRepository.ts:22-31`, `useShellViewModel.ts:24-26` | Chamado quando o layout autenticado monta. |
+| Obter badge de não lidas | `GET /shell/notificacoes` | boot | `ApiShellRepository.ts:22-25` | **Endpoint separado para contagem/badge**, solicitado em paralelo com o endpoint da empresa. |
+
+**3. Formatos esperados**
+
+| Item | Formato | Evidência | Obs |
+|---|---|---|---|
+| Identificadores e CNPJ | ID number; CNPJ string | `ShellData.ts:1-12`, `empresa.json` | |
+| Erro | Mensagem fixa de falha de carga | `useShellViewModel.ts:31-35` | |
+| Logo | Não há campo/formato definido | `ShellData.ts:1-18`, `AppTopBar.tsx:12-25` | A marca renderizada é o texto/monograma “VF”; não é obtida da API. |
+
+**4. Padrões de listagem**
+
+Não há lista de empresa; o endpoint retorna um objeto agregado.
+
+**5. Estados de UI dependentes de campos**
+
+| Estado | Campo(s) que o determina | Evidência | Obs |
+|---|---|---|---|
+| Loading global do shell | `loading` | `AppShell.tsx:10-31` | Status acessível oculto visualmente; a moldura e a rota filha continuam renderizadas. |
+| Error | `error` | `AppShell.tsx:28-29` | Exibição inline na área de conteúdo. |
+| Badge | `unreadNotifications` | `AppTopBar.tsx:27-38` | Só renderiza o badge quando valor é maior que zero. |
+| Fallback | `company.name`, `loggedInUser` | `AppTopBar.tsx:18-25, 41-61` | Nome e usuário têm fallback; região/contato/CNPJ não têm fallback de domínio. |
+
+---
+
+### Domínio: Indicadores da Home
+
+**1. Entidades e campos**
+
+| Entidade | Campo | Tipo | Obrigatório | Evidência (arquivo:linha) | Obs |
+|---|---|---|---|---|---|
+| Indicadores | `salesThisMonth`, `salesToday`, `ordersInDraft`, `budgetsInDraft`, `clientsInDraft`, `ordersAwaitingApproval`, `pendingAgendas`, `pendingTasks`, `unreadNotifications: number` | number | Sim | `Indicador.ts:1-11` | Correspondem a `vendas_mes`, `vendas_hoje`, `pedidos_em_digitacao`, `orcamentos_em_digitacao`, `clientes_em_digitacao`, `pedidos_aguardando_aprovacao`, `agendas_pendentes`, `tarefas_pendentes`, `notificacoes_nao_lidas` (`ApiHomeRepository.ts:6-19`). |
+
+**2. Operações**
+
+| Operação | Endpoint chamado | Carregamento | Evidência | Obs |
+|---|---|---|---|---|
+| Obter indicadores | `GET /home/indicadores` | sob demanda | `ApiHomeRepository.ts:26-40`, `useHomeViewModel.ts:52-69` | Carga automática ao entrar na Home; não é chamada pelo provider root. |
+
+**3. Formatos esperados**
+
+| Item | Formato | Evidência | Obs |
+|---|---|---|---|
+| Contagens/valores | number | `Indicador.ts:1-11`, `indicadores.json` | Vendas formatadas em BRL; contagens como texto numérico. |
+| Erros | String fixa de falha de carga na Home | `useHomeViewModel.ts:69-72` | |
+| Campo de notificações | `unreadNotifications: number` | `Indicador.ts:10` | Mapeado, porém não compõe os cards; o contador da Home vem da lista de notificações. |
+
+**4. Padrões de listagem**
+
+Não há listas de indicadores; a resposta é um objeto único.
+
+**5. Estados de UI dependentes de campos**
+
+| Estado | Campo(s) que o determina | Evidência | Obs |
+|---|---|---|---|
+| Loading | `loading` | `HomePage.tsx:12-20`, `HomeAvisos.tsx:12-20` | |
+| Error | `error` | `HomePage.tsx:12-16` | Retry recarrega os dados. |
+| Navegação/valores | Campos numéricos dos indicadores | `useHomeViewModel.ts:31-41` | Cards são montados a partir de oito contagens/valores; `unreadNotifications` não vira card. |
+
+---
+
+### Domínio: Pedido e orçamento
+
+**1. Entidades e campos**
+
+| Entidade | Campo | Tipo | Obrigatório | Evidência (arquivo:linha) | Obs |
+|---|---|---|---|---|---|
+| Pedido/orçamento | `id: number \| null`; `type: PedidoTipo`; `number`, `customerOrderNumber: string`; `status: PedidoStatus`; `issueDate`, `deliveryDate: string`; `companyId`, `customerId`, `paymentConditionId`, `paymentMethodId`, `carrierId`, `billingAddressId`, `deliveryAddressId`, `collectionAddressId: number \| null`; `customerName`, `customerTaxId`, `observation`, `invoiceObservation: string`; `freightAmount: number`; `items: ItemPedido[]`; `totals: PedidoTotals` | tipos compostos; strings e números | Sim; vários IDs nulláveis | `Pedido.ts:15-37` | Orçamento usa a mesma entidade, diferenciada por `type`. |
+| Tipo/status | `PedidoTipo: pedido \| orcamento`; `PedidoStatus: em_digitacao \| aguardando_aprovacao \| aprovado \| cancelado` | enums/string union | Sim | `PedidoTipo.ts:1-6` | Status desconhecido é convertido para `em_digitacao` `[inferido]` (`ApiPedidoRepository.ts:72-79`). |
+| Totais | `mixQuantity`, `volumeQuantity`, `totalCubicVolume`, `netWeight`, `grossWeight`, `grossTotal`, `discountTotal`, `netTotal: number` | number | Sim | `Pedido.ts:4-13` | O front calcula totais a partir dos itens e frete (`PedidoTotais.ts:4-30`). |
+| Produto no item | `id: number`; `code`, `description`, `family`, `brand`, `unit: string`; `netWeight`, `grossWeight`, `cubicVolume`, `length`, `width`, `height`, `packageQuantity`, `stock: number`; `allowsOutOfStockSale: boolean` | number; string; boolean | Sim | `ItemPedido.ts:1-17` | `stock` é preenchido como `0` pelo mapeador API/mock; não aparece nos mocks de produto/detalhe `[mock ausente]` (`ApiPedidoRepository.ts:155-171`, `MockPedidoRepository.ts:19-35`). |
+| Item pedido | `sequence: number`; `customerCode: string`; `product: ProdutoPedido`; `priceTableId: number`; `priceTableName`, `priceTableValidity: string`; `quantity`, `salePrice`, `discountAmount`, `total: number`; `observation: string` | number; string; objeto | Sim | `ItemPedido.ts:19-31` | |
+| Campos wire da lista | `id: number`; `numero`, `tipo`, `cliente_nome`, `data_emissao`, `status`; `total_liquido: number` | number/string | Sim | `ApiPedidoRepository.ts:8-16` | `tipo` da linha é ignorado; o tipo é determinado pela rota `[só no mock/API payload]` (`ApiPedidoRepository.ts:83-108`). |
+| Campos wire do detalhe | `id`, `tipo`, `numero`, `status`, datas; `numero_cliente`; objetos `empresa`, `cliente`, `condicao_pagamento`, `forma_pagamento`, `transportadora`; três IDs de endereço; frete, observações, `itens`, `totais` | IDs/números/string/objetos/arrays | Campos principais requeridos; vários subobjetos e campos são opcionais ou nullable | `ApiPedidoRepository.ts:18-80` | Campos opcionais recebem defaults na conversão para `Pedido`. |
+
+**2. Operações**
+
+| Operação | Endpoint chamado | Carregamento | Evidência | Obs |
+|---|---|---|---|---|
+| Listar pedidos | `GET /pedidos` | sob demanda | `ApiPedidoRepository.ts:83-85` | Carga automática ao montar a rota. |
+| Listar orçamentos | `GET /orcamentos` | sob demanda | `ApiPedidoRepository.ts:83-85` | |
+| Obter detalhe | `GET /pedidos/{id}` | sob demanda | `ApiPedidoRepository.ts:122-126` | O código usa `/pedidos/{id}` inclusive quando `type` é orçamento. |
+| Criar/salvar | `POST /pedidos` | sob demanda | `ApiPedidoRepository.ts:196-215` | O método `save` usa POST para pedido novo ou existente; não há PUT visível. Também não há endpoint de salvamento separado para orçamento. |
+| Deletar | `DELETE /pedidos/{id}` | sob demanda | `ApiPedidoRepository.ts:243-245` | |
+| Obter endereços do cliente | `GET /clientes/{customerId}/enderecos` | sob demanda | `ApiPedidoRepository.ts:247-266` | Chamado após selecionar/carregar cliente; falha é convertida em lista vazia. |
+
+**3. Formatos esperados**
+
+| Item | Formato | Evidência | Obs |
+|---|---|---|---|
+| Datas | Strings; mock usa timestamps ISO 8601 em emissão/entrega e `YYYY-MM-DD` em vigência | `detalhe_1001.json`, `tabelas_preco/listar.json` | Rascunho de pedido também pode usar apenas a data (`YYYY-MM-DD`) (`MockPedidoRepository.ts:54-58`). |
+| Moeda | Valores number; apresentação BRL | `Pedido.ts:33-35`, `PedidoCard.tsx:13-14`, `PedidoTotais.tsx:11-12` | |
+| Quantidades/pesos | number; quantidades e totais formatados em `pt-BR` | `ItemPedido.ts:8-16, 26-29`, `PedidoTotais.tsx:11-12` | |
+| IDs e booleanos | IDs number, referências podem ser `null`; `allowsOutOfStockSale` boolean | `Pedido.ts:16-32`, `ItemPedido.ts:14-16` | |
+| Erros | String exibida pelo editor/lista; para detalhe inexistente, `null` vira estado not found | `usePedidoEditorViewModel.ts:45-65, 91-105` | |
+| Validação | Quantidade positiva; preço/desconto não negativos; frete não negativo; datas de emissão obrigatórias | `pedidoSchema.ts:4-47`, `itemPedidoSchema.ts:8-15` | |
+
+**4. Padrões de listagem**
+
+- **Nome da lista:** Pedidos
+  - Estratégia: nenhuma; array completo.
+  - Como é disparada: automática ao montar a rota; busca e filtro por status são locais.
+  - Campos que o front espera do backend para paginar: nenhum.
+  - Tamanho de página no mock: 1 pedido.
+  - Evidência: `usePedidoListaViewModel.ts:28-48, 50-68`, `listar.json`.
+  - Obs: sem scroll infinito ou paginação.
+
+- **Nome da lista:** Orçamentos
+  - Estratégia: nenhuma; array completo.
+  - Como é disparada: automática ao montar a rota de orçamento; busca e filtro locais.
+  - Campos que o front espera do backend para paginar: nenhum.
+  - Tamanho de página no mock: não há registros de orçamento no mock atual.
+  - Evidência: `ApiPedidoRepository.ts:83-85`, `MockPedidoRepository.ts:111-126`.
+  - Obs: o mock usa lista vazia como seed de orçamento.
+
+- **Nome da lista:** Itens do pedido
+  - Estratégia: nenhuma; itens vêm no detalhe do pedido e são mantidos no editor.
+  - Como é disparada: junto ao detalhe ou inserção local pelo modal.
+  - Campos que o front espera do backend para paginar: nenhum.
+  - Tamanho de página no mock: 1 item no detalhe.
+  - Evidência: `ApiPedidoRepository.ts:176-193`, `detalhe_1001.json`.
+  - Obs: totais do mock de detalhe são recalculados no repository mock; o objeto `totais` do JSON não é usado por esse caminho `[só no mock]` (`MockPedidoRepository.ts:38-59`).
+
+**5. Estados de UI dependentes de campos**
+
+| Estado | Campo(s) que o determina | Evidência | Obs |
+|---|---|---|---|
+| Loading | `loading` | `PedidoListaPage.tsx:37-45`, `PedidoEditorPage.tsx:43-48` | Lista usa skeletons; editor usa skeleton próprio. |
+| Empty | `filteredOrders.length`, `items.length` | `PedidoListaPage.tsx:41-45`, `AbaProdutos.tsx:21-27` | |
+| Error/not found | `error`, resultado nulo do detalhe | `usePedidoEditorViewModel.ts:48-63` | |
+| Saving/disabled | `saving` | `PedidoEditorPage.tsx:43-44` | Estado passado ao header. |
+| Validação | `status`, IDs, frete, itens, totais e campos do item | `pedidoSchema.ts:4-47`, `itemPedidoSchema.ts:8-15` | |
+| Badge/contador | quantidade de itens é exibida; sem badge de estado da lista | `AbaProdutos.tsx:20-24` | |
+
+---
+
+### Contratos implícitos (estrutura de `src/core/shell`)
+
+- **Providers globais**
+  - `ThemeProvider`: fornece modo (`light`, `dark`, `system`), cor primária e setters via Context; **não depende de API** (`ThemeProvider.tsx:4-18, 77-111`).
+  - Não há `AuthProvider` React: a sessão vem do Zustand persistido em `localStorage` (`useAuthStore.ts:1-25`).
+  - `RequireAuth` protege o AppShell verificando apenas a sessão local; não valida sessão via API ao montar (`RequireAuth.tsx:1-14`).
+  - A raiz envolve o app em `StrictMode` e `ThemeProvider` (`main.tsx:1-12`); o layout autenticado usa `Outlet` (`App.tsx:12-39`).
+
+- **Formato de erro esperado**
+  - Cliente HTTP reconhece envelope com `success`, `data`, `error`; o objeto de erro tipado tem `code?` e `message?` (`apiClient.ts:1-10`).
+  - Em resposta HTTP não-OK, procura `message` na raiz ou `error.message`; caso contrário usa mensagem genérica. Para `success: false`, usa `error.message` ou mensagem genérica; `code` não é propagado (`apiClient.ts:46-60, 92-104`).
+  - Repositórios/ViewModels convertem erros em strings para telas; não foi encontrado Error Boundary nem provider/toast global nos caminhos analisados.
+
+- **Estados globais**
+  - Sessão: estado `user` do Zustand, persistido sob `visionflow:auth` (`useAuthStore.ts:5-25`).
+  - Tema: Context, `localStorage` (`visionflow:theme`), classe `dark` no `<html>` e CSS variables (`ThemeProvider.tsx:20-22, 32-44, 77-111`).
+  - Loading/error do shell: pertencem ao `useShellViewModel`; não foi encontrado estado global de loading compartilhado entre as features (`useShellViewModel.ts:12-45`).
+
+- **Interceptors/camada HTTP**
+  - Não há interceptor separado; `apiRequest` normaliza a barra inicial e concatena o base URL (`apiClient.ts:63-67`).
+  - Em body string, adiciona `Content-Type: application/json` se ausente; lê token persistido e adiciona `Authorization: Bearer <token>` se houver e se o header não existir (`apiClient.ts:68-77`).
+  - Faz `fetch`, lê texto e tenta parse JSON; remove o envelope retornando `data` quando encontra `success` e `data`; também aceita payload sem envelope (`apiClient.ts:77-104`).
+  - Não há refresh de token identificado. A seleção de API é `VITE_USE_API !== 'false'`; em desenvolvimento o base URL é relativo; fora de desenvolvimento usa `VITE_API_BASE_URL` ou `http://localhost:8080` (`apiClient.ts:12-21`).
+
+---
+
+### Resumo geral
+
+- **Autenticação:** login.
+- **Avisos/notificações:** listar avisos não lidos; obter contador do badge.
+- **Catálogos auxiliares de pedido:** leitura mockada de empresas, clientes, condições e formas de pagamento, transportadoras, tabelas de preço e produtos; nenhuma chamada API visível.
+- **Cliente:** listar, obter, criar, editar, deletar, consultar CNPJ, listar/salvar/excluir endereços e consultar CEP; títulos sem fonte identificada.
+- **Empresa da sessão:** obter empresa e usuário no boot do shell.
+- **Indicadores da Home:** obter indicadores quando a rota Home monta.
+- **Pedido/orçamento:** listar, obter detalhe, salvar, deletar e obter endereços do cliente; endpoints de orçamento usam implementação parcial descrita acima.
+
+**Listagens com scroll infinito:** 0. **Listagens paginadas:** 0. Os arrays identificados são carregados completos; buscas e filtros são locais. O seletor de produtos tem scroll visual no modal, sem carregamento incremental.
+
+
+

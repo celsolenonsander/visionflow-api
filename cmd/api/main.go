@@ -1,57 +1,93 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
+	"github.com/celsolenonsander/visionflow-api/internal/config"
+	"github.com/celsolenonsander/visionflow-api/internal/db"
 	"github.com/celsolenonsander/visionflow-api/internal/httpapi"
 	"github.com/celsolenonsander/visionflow-api/internal/logger"
 	"github.com/celsolenonsander/visionflow-api/internal/service"
 )
 
 func main() {
-	port := getenv("APP_PORT", "8080")
-	secret := getenv("JWT_SECRET", "troque-esta-chave-em-producao")
-
-	logFile, err := logger.New()
-	if err != nil {
-		log.Fatalf("Erro ao inicializar logger: %v", err)
-	}
-	defer logFile.Close()
-
-	svc := service.New()
-
-	// O Handler precisa conhecer o mesmo JWT_SECRET
-	// usado pelo middleware para validar os tokens.
-	h := httpapi.NewHandler(svc, secret)
-
-	router := httpapi.Routes(h, secret, logFile)
-
-	addr := ":" + port
-
-	logFile.Printf(
-		"VisionFlow API rodando em http://localhost%s",
-		addr,
-	)
-
-	logFile.Printf(
-		"Swagger: http://localhost%s/swagger/index.html",
-		addr,
-	)
-
-	if err := http.ListenAndServe(addr, router); err != nil {
-		logFile.Printf(
-			"Erro ao iniciar servidor: %v",
-			err,
-		)
+	if err := run(); err != nil {
+		log.Fatalf("erro fatal: %v", err)
 	}
 }
 
-func getenv(key, fallback string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
+func run() error {
+	// 1. Config
+	cfg, err := config.Load()
+	if err != nil {
+		return err
 	}
 
-	return fallback
+	// 2. Contexto com cancelamento (graceful shutdown)
+	ctx, stop := signal.NotifyContext(
+		context.Background(),
+		os.Interrupt,
+		syscall.SIGTERM,
+	)
+	defer stop()
+
+	// 3. Logger
+	logg, err := logger.New()
+	if err != nil {
+		return err
+	}
+	defer logg.Close()
+
+	// 4. Pool do banco
+	pool, err := db.NewPool(ctx, cfg)
+	if err != nil {
+		return err
+	}
+	defer pool.Close()
+
+	logg.Printf("✓ conectado em %s:%s/%s",
+		cfg.DBHost, cfg.DBPort, cfg.DBName)
+
+	// 5. Service e Handler
+	//    (Service ainda mock; vai receber pool no Bloco 4)
+	svc := service.New(pool)
+	handler := httpapi.NewHandler(svc, pool, cfg.JWTSecret)
+
+	// 6. Router
+	router := handler.Routes()
+
+	// 7. Server HTTP
+	srv := &http.Server{
+		Addr:              ":" + cfg.Port,
+		Handler:           router,
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+
+	errCh := make(chan error, 1)
+	go func() {
+		logg.Printf("✓ servidor ouvindo em :%s", cfg.Port)
+		if err := srv.ListenAndServe(); err != nil &&
+			!errors.Is(err, http.ErrServerClosed) {
+			errCh <- err
+		}
+	}()
+
+	select {
+	case err := <-errCh:
+		return err
+	case <-ctx.Done():
+		logg.Printf("→ encerrando servidor...")
+		shutdownCtx, cancel := context.WithTimeout(
+			context.Background(), 10*time.Second,
+		)
+		defer cancel()
+		return srv.Shutdown(shutdownCtx)
+	}
 }
