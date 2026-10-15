@@ -581,3 +581,77 @@ TABELAS DO SCHEMA NÃO MAPEADAS NO INVENTÁRIO
 --------------------------------------------------------------------------------
 FIM DO RELATÓRIO
 --------------------------------------------------------------------------------
+
+
+================================================================================
+ATUALIZAÇÃO DA IMPLEMENTAÇÃO DA API
+================================================================================
+Este complemento atualiza o inventário acima com as migrations presentes no
+repositório e com a implementação atual. As advertências iniciais sobre
+notificação, agenda/tarefa e empresa.regional estavam desatualizadas:
+- V008 cria notificacao.
+- V009 cria agenda e tarefa.
+- V010 adiciona empresa.regional.
+- V007 adiciona pedido.situacao_app (em_digitacao, aguardando_aprovacao,
+  aprovado, cancelado); o status ERP permanece em situacao_pedido.
+
+DECISÕES IMPLEMENTADAS
+--------------------------------------------------------------------------------
+- API expõe campos em snake_case e usa paginação por cursor (codigo/id), limite
+  padrão 20 e máximo 100.
+- POST /clientes não recebe codigo_erp no contrato: gera API-<id> até integração
+  com o ERP. DELETE /clientes/{id} é lógico (ativo=false).
+- DELETE /pedidos/{id} é lógico pelo campo existente apagar_dados_pedido=true;
+  pedidos marcados são omitidos da listagem e consulta.
+- clientes_em_digitacao conta clientes distintos vinculados a pedidos ou
+  orçamentos com situacao_app='em_digitacao' (codigo_erp_cliente).
+- Pedidos são gravados na base transacional; status do app usa situacao_app e
+  status do ERP usa situacao_pedido. Vendas excluem orçamentos e pedidos
+  marcados para remoção.
+- Login valida hashes por pgcrypto/crypt. A migration V011 habilita pgcrypto.
+- CNPJ e CEP são consultados externamente via BrasilAPI e ViaCEP.
+- O endpoint Swagger usa cópia embutida de docs/openapi.yaml em
+  internal/httpapi/openapi.yaml; manter os dois arquivos sincronizados.
+
+DIVERGÊNCIAS OU DECISÕES AINDA PENDENTES
+--------------------------------------------------------------------------------
+1. POST /pedidos é descrito como criar ou atualizar, mas PedidoCreate não contém
+   id do pedido; a implementação cria sempre e não atualiza. É necessário
+   definir a operação/identificador de atualização no contrato.
+2. tabela_preco.vigencia não possui semântica unívoca: a implementação deriva
+   MIN(tabela_preco_item.validade_inicial). Confirmar se a vigência deve ser
+   intervalo, validade inicial ou outra regra.
+3. price_table_validity e price_table_name de itens não são persistidos em
+   pedido_item. price_table_validity é derivado da validade aplicável na data de
+   emissão; price_table_name é resolvido pela referência do banco.
+4. CNPJ pode possuir várias inscrições estaduais; a consulta externa retorna
+   a primeira ativa, ou a primeira disponível. Confirmar se o frontend necessita
+   seleção por UF ou outra regra.
+5. codigo_erp gerado com prefixo API- é provisório e precisa de política de
+   reconciliação com o ERP para evitar colisão na integração.
+6. A migration V011 requer permissão para criar a extensão pgcrypto. O formato
+   dos hashes existentes deve ser compatível com crypt do PostgreSQL.
+7. A descrição do GET /produtos menciona stock, mas Produto não o declarava.
+   Foi adicionada a propriedade opcional ao OpenAPI e a implementação soma
+   item_estoque.quantidade por tenant/empresa e produto.
+8. O schema não tem índice único para cliente.cnpj_cpf. A API compara os dígitos
+   normalizados dentro da empresa e serializa a validação por advisory lock; a
+   unicidade de outros escritores (por exemplo, integração ERP) não é garantida
+   pelo banco.
+9. O frontend legado usa tipo_endereco=residencial, mas OpenAPI e banco aceitam
+   cobranca/entrega/ambos (C/E/A). A API mantém o contrato; o frontend deve
+   converter o caso residencial para a categoria funcional apropriada.
+10. Campos legados do frontend userNotes, lastVisit, lastAttendance e
+    purchaseStatus não fazem parte do contrato OpenAPI nem têm origem/regra
+    suficiente no schema. Não são retornados; requerem extensão de contrato e
+    decisão de produto antes de implementação.
+11. situacao_bloqueio e pedido_historico existem no schema, mas não são campos
+    nem operações do contrato atual. Não foram expostos como extensão não
+    documentada.
+
+VALIDAÇÃO
+--------------------------------------------------------------------------------
+- Testes unitários de handlers e helpers foram criados/atualizados.
+- Não foi possível compilar nem executar testes: o ambiente de implementação
+  não possui o executável Go. Não há alegação de build ou execução bem-sucedida.
+- Testes de integração ainda dependem de PostgreSQL com migrations aplicadas.

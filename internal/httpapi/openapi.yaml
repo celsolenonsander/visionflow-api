@@ -1,0 +1,2334 @@
+openapi: 3.1.0
+info:
+  title: VisionFlow API
+  version: 1.0.0
+  description: |
+    API REST do VisionFlow — SaaS multi-tenant de força de vendas.
+
+    ## Convenções
+    - **Envelope**: todas as respostas seguem `{ success, data, error }`.
+    - **Multi-tenant**: `cod_tenant` e `cod_empresa` NÃO trafegam na API;
+      o backend resolve via JWT + `usuario_empresa.empresa_padrao` e injeta
+      `SET LOCAL app.cod_tenant / app.cod_empresa`. RLS filtra automaticamente.
+    - **Snake_case**: todos os campos JSON são `snake_case`.
+    - **IDs**: cada entidade expõe `id` (= `codigo` do banco, int) e `codigo_erp` (string).
+    - **Paginação**: cursor por `codigo` do último item. Sem `total`, sem `hasMore`.
+    - **Datas**: ISO 8601 com timezone UTC (`2026-10-14T15:30:00Z`).
+      Campos `date` do banco viram `2026-10-14T00:00:00Z`.
+    - **Dinheiro**: `number` (float64). Front formata para BRL.
+
+servers:
+  - url: http://localhost:8080
+    description: Desenvolvimento local
+  - url: https://api.visionflow.com.br
+    description: Produção (placeholder)
+
+tags:
+  - name: auth
+    description: Autenticação
+  - name: home
+    description: Indicadores da Home
+  - name: shell
+    description: Dados do shell autenticado (empresa + usuário)
+  - name: notificacoes
+    description: Avisos e notificações
+  - name: clientes
+    description: Cadastro de clientes, endereços e títulos
+  - name: pedidos
+    description: Pedidos de venda
+  - name: orcamentos
+    description: Orçamentos (mesma estrutura do pedido, flag `e_um_orcamento`)
+  - name: catalogo
+    description: Catálogos auxiliares (read-only)
+  - name: agenda
+    description: Agenda de visitas/compromissos
+  - name: tarefa
+    description: Tarefas do usuário
+
+security:
+  - bearerAuth: []
+
+paths:
+  # ═══════════════════════════════════════════════════════════
+  # AUTH
+  # ═══════════════════════════════════════════════════════════
+  /auth/login:
+    post:
+      tags: [auth]
+      summary: Autenticar usuário
+      description: |
+        Retorna o usuário autenticado e um JWT (HS256, exp 8h).
+        Claims: `sub` (cod_usuario), `iat`, `exp`.
+        Não expõe `cod_tenant`/`cod_empresa` no token.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            examples:
+              valido:
+                summary: Credenciais válidas
+                value:
+                  email: vendedor@distribuidora.com.br
+                  senha: Senha@123
+      responses:
+        '200':
+          description: Login bem-sucedido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponseEnvelope'
+              examples:
+                sucesso:
+                  value:
+                    success: true
+                    data:
+                      usuario:
+                        id: 42
+                        nome: João da Silva
+                        email: vendedor@distribuidora.com.br
+                        token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+                    error: null
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: Credenciais inválidas
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+              examples:
+                invalido:
+                  value:
+                    success: false
+                    data: null
+                    error:
+                      code: CREDENCIAIS_INVALIDAS
+                      message: E-mail ou senha incorretos.
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /auth/logout:
+    post:
+      tags: [auth]
+      summary: Encerrar sessão
+      description: |
+        Invalida a sessão no cliente. Hoje é stateless (apenas 200).
+        # TODO: definir se haverá blacklist de token no backend.
+      responses:
+        '200':
+          description: Logout efetuado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+              examples:
+                sucesso:
+                  value:
+                    success: true
+                    data: null
+                    error: null
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ═══════════════════════════════════════════════════════════
+  # HOME
+  # ═══════════════════════════════════════════════════════════
+  /home/indicadores:
+    get:
+      tags: [home]
+      summary: Indicadores da Home
+      description: |
+        Contadores e somas exibidos na Home. Todos derivados (sem tabela própria).
+        - `pending_agendas` e `pending_tasks` derivam de `agenda` e `tarefa`.
+        - `unread_notifications` deriva de `notificacao` (lida = false).
+        - `sales_this_month` e `sales_today` somam
+          `pedido_item.valor_total_produtos_liquido` de pedidos (não orçamentos)
+          que não foram marcados para remoção.
+        - `clientes_em_digitacao` conta clientes distintos com pedido ou orçamento
+          em `situacao_app = em_digitacao`, usando `pedido.codigo_erp_cliente`.
+      responses:
+        '200':
+          description: Indicadores
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IndicadorEnvelope'
+              examples:
+                sucesso:
+                  value:
+                    success: true
+                    data:
+                      vendas_mes: 125430.50
+                      vendas_hoje: 3890.00
+                      pedidos_em_digitacao: 7
+                      orcamentos_em_digitacao: 3
+                      clientes_em_digitacao: 2
+                      pedidos_aguardando_aprovacao: 4
+                      agendas_pendentes: 5
+                      tarefas_pendentes: 8
+                      notificacoes_nao_lidas: 12
+                    error: null
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # ═══════════════════════════════════════════════════════════
+  # SHELL
+  # ═══════════════════════════════════════════════════════════
+  /shell/empresa:
+    get:
+      tags: [shell]
+      summary: Empresa e usuário da sessão
+      description: |
+        Dados da empresa padrão (via `usuario_empresa.empresa_padrao`) e do usuário logado.
+        `regional` vem de `empresa.regional`.
+      responses:
+        '200':
+          description: Dados da empresa e usuário
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmpresaEnvelope'
+              examples:
+                sucesso:
+                  value:
+                    success: true
+                    data:
+                      nome: Distribuidora Central LTDA
+                      cnpj: 12.345.678/0001-90
+                      regional: Sudeste
+                      contato: contato@distribuidoracentral.com.br
+                      usuario_logado:
+                        id: 42
+                        nome: João da Silva
+                        email: vendedor@distribuidora.com.br
+                    error: null
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /shell/notificacoes:
+    get:
+      tags: [shell]
+      deprecated: true
+      summary: '[DEPRECATED] Contador de não lidas'
+      description: |
+        Alias mantido para compatibilidade com o front atual.
+
+        **Migrar para** `GET /notificacoes/nao-lidas/count`
+        (1 linha em `ApiShellRepository.ts`).
+      responses:
+        '200':
+          description: Contador (mesmo schema do endpoint consolidado)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NaoLidasEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ═══════════════════════════════════════════════════════════
+  # NOTIFICAÇÕES
+  # ═══════════════════════════════════════════════════════════
+  /notificacoes:
+    get:
+      tags: [notificacoes]
+      summary: Listar notificações
+      description: Lista paginada por cursor, ordem decrescente de `data_evento`.
+      parameters:
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/CursorParam'
+        - name: lida
+          in: query
+          description: Filtrar por status de leitura
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Lista de notificações
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificacaoCursorEnvelope'
+              examples:
+                sucesso:
+                  value:
+                    success: true
+                    data:
+                      items:
+                        - id: 501
+                          titulo: Pedido #1234 aprovado
+                          mensagem: O pedido foi aprovado pelo supervisor.
+                          tipo: pedido_aprovado
+                          lida: false
+                          data_evento: '2026-10-14T13:22:00Z'
+                          origem_tabela: pedido
+                          origem_id: 1234
+                      nextCursor: "501"
+                    error: null
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /notificacoes/nao-lidas/count:
+    get:
+      tags: [notificacoes]
+      summary: Contador de notificações não lidas
+      description: |
+        Retorna apenas o contador para o badge do shell.
+        Substitui `/shell/notificacoes` (deprecated).
+      responses:
+        '200':
+          description: Contador
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NaoLidasEnvelope'
+              examples:
+                sucesso:
+                  value:
+                    success: true
+                    data:
+                      nao_lidas: 12
+                    error: null
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ═══════════════════════════════════════════════════════════
+  # CLIENTES
+  # ═══════════════════════════════════════════════════════════
+  /clientes:
+    get:
+      tags: [clientes]
+      summary: Listar clientes
+      parameters:
+        - name: busca
+          in: query
+          description: Busca por razão social, fantasia ou CNPJ/CPF
+          schema:
+            type: string
+        - name: status
+          in: query
+          description: Filtro por situação
+          schema:
+            type: string
+            enum: [ativo, inativo, prospect]
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200':
+          description: Lista de clientes
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClienteCursorEnvelope'
+              examples:
+                sucesso:
+                  value:
+                    success: true
+                    data:
+                      items:
+                        - id: 24129
+                          codigo_erp: "A001"
+                          nome_razao_social: Supermercado Bom Preço LTDA
+                          nome_fantasia: Bom Preço
+                          cnpj_cpf: 61.186.888/0001-93
+                          tipo_pessoa: PJ
+                          cidade: São Paulo
+                          estado: SP
+                          ativo: true
+                      nextCursor: "24129"
+                    error: null
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    post:
+      tags: [clientes]
+      summary: Criar cliente
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClienteCreate'
+            examples:
+              novo:
+                value:
+                  nome_razao_social: Mercadinho do Zé LTDA
+                  nome_fantasia: Mercadinho do Zé
+                  cnpj_cpf: 12.345.678/0001-90
+                  tipo_pessoa: PJ
+                  telefone1: (11) 3456-7890
+                  email_contato_comprador: compras@mercadinhoze.com.br
+      responses:
+        '201':
+          description: Cliente criado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClienteEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: CNPJ/CPF já cadastrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+              examples:
+                duplicado:
+                  value:
+                    success: false
+                    data: null
+                    error:
+                      code: CLIENTE_JA_EXISTE
+                      message: Já existe um cliente com este CNPJ/CPF.
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /clientes/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdPathParam'
+    get:
+      tags: [clientes]
+      summary: Obter cliente
+      responses:
+        '200':
+          description: Detalhe do cliente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClienteDetalheEnvelope'
+              examples:
+                sucesso:
+                  value:
+                    success: true
+                    data:
+                      id: 24129
+                      codigo_erp: "A001"
+                      nome_razao_social: Supermercado Bom Preço LTDA
+                      nome_fantasia: Bom Preço
+                      cnpj_cpf: 61.186.888/0001-93
+                      tipo_pessoa: PJ
+                      prospect: false
+                      ativo: true
+                      limite_credito_total: 50000.00
+                      data_inclusao: '2023-03-15T00:00:00Z'
+                      anotacao_erp: Cliente preferencial.
+                      enderecos: []
+                      contas_receber: []
+                    error: null
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    put:
+      tags: [clientes]
+      summary: Atualizar cliente
+      description: |
+        # TODO: o front hoje envia payload misto (camelCase + snake_case);
+        este contrato define o payload limpo em snake_case.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClienteCreate'
+      responses:
+        '200':
+          description: Cliente atualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClienteEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags: [clientes]
+      summary: Remover cliente
+      description: |
+        # TODO: definir se é soft delete (`ativo = false`) ou hard delete.
+      responses:
+        '200':
+          description: Cliente removido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /clientes/cnpj/{cnpj}:
+    get:
+      tags: [clientes]
+      summary: Consultar CNPJ (integração externa)
+      parameters:
+        - name: cnpj
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "61186888000193"
+      responses:
+        '200':
+          description: Dados do CNPJ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsultaCnpjEnvelope'
+              examples:
+                sucesso:
+                  value:
+                    success: true
+                    data:
+                      cnpj: "61.186.888/0001-93"
+                      razao_social: Supermercado Bom Preço LTDA
+                      nome_fantasia: Bom Preço
+                      inscricao_estadual: "123.456.789.012"
+                      email: contato@bompreco.com.br
+                      telefone: (11) 3456-7890
+                      endereco:
+                        cep: "01310-100"
+                        logradouro: Avenida Paulista
+                        numero: "1000"
+                        complemento: Sala 501
+                        bairro: Bela Vista
+                        cidade: São Paulo
+                        estado: SP
+                    error: null
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /clientes/{id}/enderecos:
+    parameters:
+      - $ref: '#/components/parameters/IdPathParam'
+    get:
+      tags: [clientes]
+      summary: Listar endereços do cliente
+      responses:
+        '200':
+          description: Endereços
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnderecoListEnvelope'
+              examples:
+                sucesso:
+                  value:
+                    success: true
+                    data:
+                      - id: 15
+                        codigo_erp: "E001"
+                        tipo_endereco: entrega
+                        endereco_padrao: true
+                        cep: "01310-100"
+                        logradouro: Avenida Paulista
+                        numero_endereco: "1000"
+                        complemento_endereco: Sala 501
+                        bairro: Bela Vista
+                        cidade: São Paulo
+                        estado: SP
+                        ponto_referencia: Próximo ao MASP
+                    error: null
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    post:
+      tags: [clientes]
+      summary: Criar endereço
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnderecoCreate'
+      responses:
+        '201':
+          description: Endereço criado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnderecoEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /clientes/{id}/enderecos/{enderecoId}:
+    parameters:
+      - $ref: '#/components/parameters/IdPathParam'
+      - name: enderecoId
+        in: path
+        required: true
+        schema:
+          type: integer
+    delete:
+      tags: [clientes]
+      summary: Remover endereço
+      responses:
+        '200':
+          description: Endereço removido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /clientes/{id}/contas-receber:
+    parameters:
+      - $ref: '#/components/parameters/IdPathParam'
+    get:
+      tags: [clientes]
+      summary: Contas a receber do cliente (read-only)
+      description: |
+        Títulos em aberto do cliente, ordenados por vencimento (vencidos primeiro).
+        Filtra por `codigo_erp_cliente` derivado do `{id}` do cliente + sessão.
+        `situacao` é derivada no backend.
+      responses:
+        '200':
+          description: Títulos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContaReceberListEnvelope'
+              examples:
+                sucesso:
+                  value:
+                    success: true
+                    data:
+                      - id: 8821
+                        codigo_erp: "T0001"
+                        titulo_numero_documento: "NF 12345"
+                        titulo_especie_documento: NF
+                        titulo_serie: "1"
+                        titulo_numero_parcela: "1/3"
+                        data_emissao: '2026-08-15T00:00:00Z'
+                        data_vencimento: '2026-09-15T00:00:00Z'
+                        valor_total_aberto: 1500.00
+                        situacao: vencido
+                    error: null
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /cep/{cep}:
+    get:
+      tags: [clientes]
+      summary: Consultar CEP (integração externa)
+      parameters:
+        - name: cep
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "01310100"
+      responses:
+        '200':
+          description: Dados do CEP
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CEPEnvelope'
+              examples:
+                sucesso:
+                  value:
+                    success: true
+                    data:
+                      cep: "01310-100"
+                      logradouro: Avenida Paulista
+                      bairro: Bela Vista
+                      cidade: São Paulo
+                      estado: SP
+                    error: null
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  # ═══════════════════════════════════════════════════════════
+  # PEDIDOS
+  # ═══════════════════════════════════════════════════════════
+  /pedidos:
+    get:
+      tags: [pedidos]
+      summary: Listar pedidos
+      parameters:
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/PedidoStatus'
+        - name: cliente_id
+          in: query
+          schema:
+            type: integer
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200':
+          description: Lista de pedidos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PedidoCursorEnvelope'
+              examples:
+                sucesso:
+                  value:
+                    success: true
+                    data:
+                      items:
+                        - id: 1001
+                          numero: "1234"
+                          tipo: pedido
+                          cliente_nome: Supermercado Bom Preço LTDA
+                          data_emissao: '2026-10-14T00:00:00Z'
+                          status: em_digitacao
+                          status_erp: "1"
+                          status_erp_label: Aberto
+                          total_liquido: 3890.00
+                      nextCursor: "1001"
+                    error: null
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    post:
+      tags: [pedidos]
+      summary: Criar ou atualizar pedido
+      description: |
+        # TODO: o front reusa POST para update; avaliar se passa a usar PUT/PATCH.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PedidoCreate'
+      responses:
+        '201':
+          description: Pedido criado/atualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PedidoDetalheEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /pedidos/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdPathParam'
+    get:
+      tags: [pedidos]
+      summary: Obter pedido
+      responses:
+        '200':
+          description: Detalhe do pedido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PedidoDetalheEnvelope'
+              examples:
+                sucesso:
+                  value:
+                    success: true
+                    data:
+                      id: 1001
+                      codigo_erp: "P0001"
+                      numero: "1234"
+                      tipo: pedido
+                      status: em_digitacao
+                      status_erp: "1"
+                      status_erp_label: Aberto
+                      data_emissao: '2026-10-14T00:00:00Z'
+                      cliente:
+                        id: 24129
+                        nome_razao_social: Supermercado Bom Preço LTDA
+                        cnpj_cpf: 61.186.888/0001-93
+                      valor_frete: 50.00
+                      observacoes_pedido: Entregar após 14h.
+                      itens:
+                        - id: 5001
+                          sequence: 1
+                          product:
+                            id: 88
+                            codigo_erp: "PROD-88"
+                            descricao: Refrigerante Cola 2L
+                            marca: Coca-Cola
+                            unidade: UN
+                            preco_venda: 8.50
+                          quantidade_informada: 10
+                          sale_price: 8.50
+                          original_price: 9.00
+                          valor_desconto_comercial: 5.00
+                          valor_total_produtos_liquido: 80.00
+                      totais:
+                        quantidade_mix: 1
+                        quantidade_volume: 10
+                        volume_total_cubico: 0.08
+                        peso_liquido: 20.0
+                        peso_bruto: 21.0
+                        valor_bruto: 85.00
+                        valor_desconto: 5.00
+                        valor_liquido: 80.00
+                    error: null
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags: [pedidos]
+      summary: Remover pedido
+      responses:
+        '200':
+          description: Pedido removido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ═══════════════════════════════════════════════════════════
+  # ORÇAMENTOS
+  # ═══════════════════════════════════════════════════════════
+  /orcamentos:
+    get:
+      tags: [orcamentos]
+      summary: Listar orçamentos
+      parameters:
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/PedidoStatus'
+        - name: cliente_id
+          in: query
+          schema:
+            type: integer
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200':
+          description: Lista de orçamentos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PedidoCursorEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /orcamentos/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdPathParam'
+    get:
+      tags: [orcamentos]
+      summary: Obter orçamento
+      description: |
+        # TODO: front hoje usa `/pedidos/{id}` mesmo para orçamento.
+      responses:
+        '200':
+          description: Detalhe do orçamento
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PedidoDetalheEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ═══════════════════════════════════════════════════════════
+  # CATÁLOGOS
+  # ═══════════════════════════════════════════════════════════
+  /empresas:
+    get:
+      tags: [catalogo]
+      summary: Listar empresas
+      description: '# TODO: front ainda usa mock local — endpoint a integrar'
+      parameters:
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200':
+          description: Lista de empresas
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmpresaCursorEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /condicoes-pagamento:
+    get:
+      tags: [catalogo]
+      summary: Listar condições de pagamento
+      description: '# TODO: front ainda usa mock local — endpoint a integrar'
+      parameters:
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200':
+          description: Lista de condições
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CondicaoPagamentoCursorEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /formas-pagamento:
+    get:
+      tags: [catalogo]
+      summary: Listar formas de pagamento
+      description: '# TODO: front ainda usa mock local — endpoint a integrar'
+      parameters:
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200':
+          description: Lista de formas
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FormaPagamentoCursorEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /transportadoras:
+    get:
+      tags: [catalogo]
+      summary: Listar transportadoras
+      description: '# TODO: front ainda usa mock local — endpoint a integrar'
+      parameters:
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200':
+          description: Lista de transportadoras
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransportadoraCursorEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /tabelas-preco:
+    get:
+      tags: [catalogo]
+      summary: Listar tabelas de preço
+      description: '# TODO: front ainda usa mock local — endpoint a integrar'
+      parameters:
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200':
+          description: Lista de tabelas
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TabelaPrecoCursorEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /produtos:
+    get:
+      tags: [catalogo]
+      summary: Listar produtos
+      description: |
+        # TODO: front ainda usa mock local — endpoint a integrar.
+        `stock` (JOIN `item_estoque`) e `preco_venda` (JOIN `tabela_preco_item`).
+      parameters:
+        - name: busca
+          in: query
+          schema:
+            type: string
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200':
+          description: Lista de produtos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProdutoCursorEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ═══════════════════════════════════════════════════════════
+  # AGENDA
+  # ═══════════════════════════════════════════════════════════
+  /agenda:
+    get:
+      tags: [agenda]
+      summary: Listar agenda
+      description: '# TODO: front ainda não consome — implementar UI'
+      parameters:
+        - name: concluida
+          in: query
+          schema:
+            type: boolean
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200':
+          description: Lista de compromissos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgendaCursorEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      tags: [agenda]
+      summary: Criar compromisso
+      description: '# TODO: front ainda não consome — implementar UI'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgendaCreate'
+      responses:
+        '201':
+          description: Compromisso criado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgendaEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /agenda/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdPathParam'
+    get:
+      tags: [agenda]
+      summary: Obter compromisso
+      responses:
+        '200':
+          description: Compromisso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgendaEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags: [agenda]
+      summary: Atualizar compromisso
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgendaCreate'
+      responses:
+        '200':
+          description: Compromisso atualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgendaEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /agenda/{id}/concluir:
+    parameters:
+      - $ref: '#/components/parameters/IdPathParam'
+    patch:
+      tags: [agenda]
+      summary: Concluir compromisso
+      description: Marca `concluida = true`. Sem body.
+      responses:
+        '200':
+          description: Compromisso concluído
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgendaEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ═══════════════════════════════════════════════════════════
+  # TAREFAS
+  # ═══════════════════════════════════════════════════════════
+  /tarefas:
+    get:
+      tags: [tarefa]
+      summary: Listar tarefas
+      description: '# TODO: front ainda não consome — implementar UI'
+      parameters:
+        - name: concluida
+          in: query
+          schema:
+            type: boolean
+        - name: prioridade
+          in: query
+          schema:
+            type: string
+            enum: [baixa, media, alta]
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200':
+          description: Lista de tarefas
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TarefaCursorEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      tags: [tarefa]
+      summary: Criar tarefa
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TarefaCreate'
+      responses:
+        '201':
+          description: Tarefa criada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TarefaEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /tarefas/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdPathParam'
+    get:
+      tags: [tarefa]
+      summary: Obter tarefa
+      responses:
+        '200':
+          description: Tarefa
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TarefaEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags: [tarefa]
+      summary: Atualizar tarefa
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TarefaCreate'
+      responses:
+        '200':
+          description: Tarefa atualizada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TarefaEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /tarefas/{id}/concluir:
+    parameters:
+      - $ref: '#/components/parameters/IdPathParam'
+    patch:
+      tags: [tarefa]
+      summary: Concluir tarefa
+      description: Marca `concluida = true`. Sem body.
+      responses:
+        '200':
+          description: Tarefa concluída
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TarefaEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'          
+# ═══════════════════════════════════════════════════════════
+# COMPONENTS
+# ═══════════════════════════════════════════════════════════
+components:
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT HS256 (exp 8h). Claims: `sub` (cod_usuario), `iat`, `exp`.
+        Header: `Authorization: Bearer <token>`.
+
+  parameters:
+    LimitParam:
+      name: limit
+      in: query
+      description: Tamanho da página (padrão 20, máx 100)
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+
+    CursorParam:
+      name: cursor
+      in: query
+      description: |
+        Cursor de paginação (id do último item da página anterior).
+        Null/ausente = primeira página.
+      schema:
+        type: string
+
+    IdPathParam:
+      name: id
+      in: path
+      required: true
+      description: Identificador público (= `codigo` do banco)
+      schema:
+        type: integer
+
+  responses:
+    BadRequest:
+      description: Requisição inválida
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/APIResponse'
+          examples:
+            generico:
+              value:
+                success: false
+                data: null
+                error:
+                  code: REQUISICAO_INVALIDA
+                  message: Dados inválidos na requisição.
+
+    Unauthorized:
+      description: Não autenticado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/APIResponse'
+          examples:
+            sem_token:
+              value:
+                success: false
+                data: null
+                error:
+                  code: NAO_AUTENTICADO
+                  message: Token ausente ou expirado.
+
+    Forbidden:
+      description: Sem permissão para acessar o recurso
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/APIResponse'
+          examples:
+            sem_permissao:
+              value:
+                success: false
+                data: null
+                error:
+                  code: SEM_PERMISSAO
+                  message: Você não tem permissão para acessar este recurso.
+
+    NotFound:
+      description: Recurso não encontrado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/APIResponse'
+          examples:
+            nao_encontrado:
+              value:
+                success: false
+                data: null
+                error:
+                  code: RECURSO_NAO_ENCONTRADO
+                  message: Recurso não encontrado.
+
+    Conflict:
+      description: Conflito (recurso duplicado, etc)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/APIResponse'
+          examples:
+            duplicado:
+              value:
+                success: false
+                data: null
+                error:
+                  code: RECURSO_DUPLICADO
+                  message: Já existe um recurso com estes dados.
+
+    InternalError:
+      description: Erro interno
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/APIResponse'
+          examples:
+            erro:
+              value:
+                success: false
+                data: null
+                error:
+                  code: ERRO_INTERNO
+                  message: Erro inesperado no servidor.          
+  schemas:
+
+    # ─── ENVELOPE ────────────────────────────────────────
+    APIError:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          description: Código SCREAMING_SNAKE_CASE em português
+          example: CLIENTE_NAO_ENCONTRADO
+        message:
+          type: string
+          example: Cliente não encontrado.
+
+    APIResponse:
+      type: object
+      required: [success, data, error]
+      properties:
+        success:
+          type: boolean
+        data:
+          oneOf:
+            - type: object
+              additionalProperties: true
+            - type: array
+              items: {}
+            - type: 'null'
+        error:
+          oneOf:
+            - $ref: '#/components/schemas/APIError'
+            - type: 'null'
+
+    # ─── PAGINAÇÃO ───────────────────────────────────────
+    CursorPage:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items: {}
+        nextCursor:
+          type:
+            - string
+            - 'null'
+          description: Cursor da próxima página (null = fim)
+
+    # ─── AUTH ────────────────────────────────────────────
+    LoginRequest:
+      type: object
+      required: [email, senha]
+      properties:
+        email:
+          type: string
+          format: email
+          example: vendedor@distribuidora.com.br
+        senha:
+          type: string
+          format: password
+          example: Senha@123
+
+    LoginResponse:
+      type: object
+      required: [usuario]
+      properties:
+        usuario:
+          $ref: '#/components/schemas/Usuario'
+
+    LoginResponseEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/APIResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/LoginResponse'
+
+    Usuario:
+      type: object
+      required: [id, nome, email]
+      properties:
+        id:
+          type: integer
+          example: 42
+        nome:
+          type: string
+          example: João da Silva
+        email:
+          type: string
+          format: email
+        token:
+          type: string
+          description: JWT HS256, exp 8h (presente apenas no login)
+
+    # ─── HOME ────────────────────────────────────────────
+    Indicador:
+      type: object
+      required:
+        - vendas_mes
+        - vendas_hoje
+        - pedidos_em_digitacao
+        - orcamentos_em_digitacao
+        - clientes_em_digitacao
+        - pedidos_aguardando_aprovacao
+        - agendas_pendentes
+        - tarefas_pendentes
+        - notificacoes_nao_lidas
+      properties:
+        vendas_mes:
+          type: number
+          description: Soma de pedidos no mês corrente (BRL)
+        vendas_hoje:
+          type: number
+          description: Soma de pedidos do dia (BRL)
+        pedidos_em_digitacao:
+          type: integer
+        orcamentos_em_digitacao:
+          type: integer
+        clientes_em_digitacao:
+          type: integer
+        pedidos_aguardando_aprovacao:
+          type: integer
+        agendas_pendentes:
+          type: integer
+        tarefas_pendentes:
+          type: integer
+        notificacoes_nao_lidas:
+          type: integer
+
+    IndicadorEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/APIResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/Indicador'
+
+    # ─── SHELL ───────────────────────────────────────────
+    Empresa:
+      type: object
+      required: [nome, cnpj]
+      properties:
+        nome:
+          type: string
+        cnpj:
+          type: string
+        regional:
+          type:
+            - string
+            - 'null'
+          description: Regional comercial (ex Sudeste)
+          example: Sudeste
+        contato:
+          type:
+            - string
+            - 'null'
+          description: 'Contato principal — # TODO: telefone ou email?'
+        usuario_logado:
+          $ref: '#/components/schemas/Usuario'
+
+    EmpresaEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/APIResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/Empresa'
+
+    # ─── NOTIFICAÇÕES ────────────────────────────────────
+    Notificacao:
+      type: object
+      required: [id, titulo, lida, data_evento]
+      properties:
+        id:
+          type: integer
+        titulo:
+          type: string
+        mensagem:
+          type:
+            - string
+            - 'null'
+        tipo:
+          type:
+            - string
+            - 'null'
+          description: '# TODO: enum a definir (banco é varchar(50) livre)'
+          example: pedido_aprovado
+        lida:
+          type: boolean
+        data_evento:
+          type: string
+          format: date-time
+          example: '2026-10-14T13:22:00Z'
+        origem_tabela:
+          type:
+            - string
+            - 'null'
+          example: pedido
+        origem_id:
+          type:
+            - integer
+            - 'null'
+          example: 1234
+
+    NotificacaoCursorEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/APIResponse'
+        - type: object
+          properties:
+            data:
+              allOf:
+                - $ref: '#/components/schemas/CursorPage'
+                - type: object
+                  properties:
+                    items:
+                      type: array
+                      items:
+                        $ref: '#/components/schemas/Notificacao'
+
+    NaoLidasEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/APIResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [nao_lidas]
+              properties:
+                nao_lidas:
+                  type: integer
+
+    # ─── CLIENTE ─────────────────────────────────────────
+    TipoPessoa:
+      type: string
+      enum: [PF, PJ]
+      description: PF = pessoa física, PJ = pessoa jurídica
+
+    ClienteCreate:
+      type: object
+      required: [nome_razao_social, tipo_pessoa]
+      properties:
+        nome_razao_social: { type: string }
+        nome_fantasia: { type: string }
+        cnpj_cpf: { type: string }
+        inscricao_estadual_rg: { type: string }
+        tipo_pessoa:
+          $ref: '#/components/schemas/TipoPessoa'
+        prospect:
+          type: boolean
+          default: false
+        telefone1: { type: string }
+        telefone2: { type: string }
+        celular: { type: string }
+        nome_contato_comprador: { type: string }
+        email_contato_comprador: { type: string }
+        nome_contato_faturamento: { type: string }
+        email_contato_faturamento: { type: string }
+        limite_credito_total:
+          type: number
+          default: 0
+        anotacao_erp: { type: string }
+        cep: { type: string }
+        logradouro: { type: string }
+        numero_endereco: { type: string }
+        complemento: { type: string }
+        bairro: { type: string }
+        cidade: { type: string }
+        estado: { type: string }
+
+    ClienteDetalhe:
+      allOf:
+        - $ref: '#/components/schemas/ClienteCreate'
+        - type: object
+          properties:
+            id:
+              type: integer
+            codigo_erp:
+              type: string
+            ativo:
+              type: boolean
+            data_inclusao:
+              type:
+                - string
+                - 'null'
+              format: date-time
+            enderecos:
+              type: array
+              items:
+                $ref: '#/components/schemas/Endereco'
+            contas_receber:
+              type: array
+              items:
+                $ref: '#/components/schemas/ContaReceber'
+
+    Cliente:
+      type: object
+      required: [id, codigo_erp, nome_razao_social]
+      properties:
+        id:
+          type: integer
+        codigo_erp:
+          type: string
+        nome_razao_social:
+          type: string
+        nome_fantasia:
+          type:
+            - string
+            - 'null'
+        cnpj_cpf:
+          type:
+            - string
+            - 'null'
+        tipo_pessoa:
+          oneOf:
+            - $ref: '#/components/schemas/TipoPessoa'
+            - type: 'null'
+        cidade:
+          type:
+            - string
+            - 'null'
+        estado:
+          type:
+            - string
+            - 'null'
+        ativo:
+          type: boolean
+
+    ClienteEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/APIResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/Cliente'
+
+    ClienteDetalheEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/APIResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/ClienteDetalhe'
+
+    ClienteCursorEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/APIResponse'
+        - type: object
+          properties:
+            data:
+              allOf:
+                - $ref: '#/components/schemas/CursorPage'
+                - type: object
+                  properties:
+                    items:
+                      type: array
+                      items:
+                        $ref: '#/components/schemas/Cliente'
+
+    # ─── ENDEREÇO ────────────────────────────────────────
+    EnderecoTipo:
+      type: string
+      enum: [cobranca, entrega, ambos]
+      description: |
+        C = Cobrança, E = Entrega, A = Ambos (banco tem char(1)).
+        # TODO: front usa "residencial" — remapear no front.
+
+    EnderecoCreate:
+      type: object
+      required: [tipo_endereco, cep, logradouro, numero_endereco, bairro, cidade, estado]
+      properties:
+        tipo_endereco:
+          $ref: '#/components/schemas/EnderecoTipo'
+        endereco_padrao:
+          type: boolean
+          default: false
+        cep: { type: string }
+        logradouro: { type: string }
+        numero_endereco: { type: string }
+        complemento_endereco: { type: string }
+        bairro: { type: string }
+        cidade: { type: string }
+        estado: { type: string }
+        ponto_referencia: { type: string }
+        restricoes_horarios: { type: string }
+
+    Endereco:
+      allOf:
+        - $ref: '#/components/schemas/EnderecoCreate'
+        - type: object
+          properties:
+            id:
+              type: integer
+            codigo_erp:
+              type: string
+
+    EnderecoEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/APIResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/Endereco'
+
+    EnderecoListEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/APIResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/Endereco'
+
+    # ─── CONTA A RECEBER ─────────────────────────────────
+    ContaReceber:
+      type: object
+      required: [id, valor_total_aberto, situacao]
+      properties:
+        id:
+          type: integer
+        codigo_erp:
+          type: string
+        titulo_numero_documento:
+          type:
+            - string
+            - 'null'
+        titulo_especie_documento:
+          type:
+            - string
+            - 'null'
+        titulo_serie:
+          type:
+            - string
+            - 'null'
+        titulo_numero_parcela:
+          type:
+            - string
+            - 'null'
+          example: "1/3"
+        data_emissao:
+          type:
+            - string
+            - 'null'
+          format: date-time
+        data_vencimento:
+          type:
+            - string
+            - 'null'
+          format: date-time
+        valor_total_aberto:
+          type: number
+        situacao:
+          type: string
+          enum: [aberto, vencido, pago]
+          description: |
+            Derivado no backend:
+            - pago: data_liquidacao IS NOT NULL
+            - vencido: data_liquidacao IS NULL AND data_vencimento < hoje
+            - aberto: caso contrário
+
+    ContaReceberListEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/APIResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/ContaReceber'
+
+    # ─── CEP / CNPJ ──────────────────────────────────────
+    CEP:
+      type: object
+      properties:
+        cep: { type: string }
+        logradouro: { type: string }
+        bairro: { type: string }
+        cidade: { type: string }
+        estado: { type: string }
+
+    CEPEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/APIResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/CEP'
+
+    ConsultaCnpjEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/APIResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                cnpj: { type: string }
+                razao_social: { type: string }
+                nome_fantasia: { type: string }
+                inscricao_estadual: { type: string }
+                email: { type: string }
+                telefone: { type: string }
+                endereco:
+                  $ref: '#/components/schemas/CEP'
+
+    # ─── PEDIDO ──────────────────────────────────────────
+    PedidoTipo:
+      type: string
+      enum: [pedido, orcamento]
+
+    PedidoStatus:
+      type: string
+      enum: [em_digitacao, aguardando_aprovacao, aprovado, cancelado]
+      description: |
+        Fase do pedido no app (`pedido.situacao_app`).
+        - em_digitacao: em digitação pelo vendedor
+        - aguardando_aprovacao: aguardando aprovação do supervisor
+        - aprovado: aprovado
+        - cancelado: cancelado
+
+    PedidoStatusErp:
+      type: string
+      description: |
+        Status do ERP (`pedido.situacao_pedido`, char(2) numérico).
+        - 1 = Aberto
+        - 2 = Cancelado
+        - 3 = Faturado Total
+        - 4 = Expedido
+        - 5 = Entregue
+        - 7 = Faturado Parcial/Encerrado
+        - 8 = Faturado Parcial/Aberto
+        - 11 = Orçamento Revisado
+        - 12 = Orçamento Aprovado
+      example: "1"
+
+    ProdutoPedido:
+      type: object
+      properties:
+        id: { type: integer }
+        codigo_erp: { type: string }
+        descricao: { type: string }
+        familia: { type: string }
+        marca: { type: string }
+        unidade: { type: string }
+        preco_venda: { type: number }
+        stock: { type: number }
+        peso_liquido: { type: number }
+        peso_bruto: { type: number }
+
+    ItemPedido:
+      type: object
+      required: [sequence, product, quantidade_informada, sale_price]
+      properties:
+        id:
+          type: integer
+        sequence:
+          type: integer
+        product:
+          $ref: '#/components/schemas/ProdutoPedido'
+        price_table_id:
+          type: integer
+        price_table_name:
+          type: string
+        price_table_validity:
+          type: string
+          format: date-time
+        quantidade_informada:
+          type: number
+        sale_price:
+          type: number
+          description: Preço praticado (= `preco_venda_praticado_digitado`)
+        original_price:
+          type: number
+          description: Preço sugerido (= `preco_venda_original_sugerido`)
+        valor_desconto_comercial:
+          type: number
+        valor_total_produtos_liquido:
+          type: number
+        data_entrega:
+          type:
+            - string
+            - 'null'
+          format: date-time
+        observacao_item:
+          type:
+            - string
+            - 'null'
+
+    PedidoTotais:
+      type: object
+      properties:
+        quantidade_mix: { type: number }
+        quantidade_volume: { type: number }
+        volume_total_cubico: { type: number }
+        peso_liquido: { type: number }
+        peso_bruto: { type: number }
+        valor_bruto: { type: number }
+        valor_desconto: { type: number }
+        valor_liquido: { type: number }
+
+    PedidoCreate:
+      type: object
+      required: [tipo, data_emissao]
+      properties:
+        tipo:
+          $ref: '#/components/schemas/PedidoTipo'
+        numero_cliente: { type: string }
+        status:
+          $ref: '#/components/schemas/PedidoStatus'
+        data_emissao:
+          type: string
+          format: date-time
+        data_entrega:
+          type:
+            - string
+            - 'null'
+          format: date-time
+        empresa_id: { type: integer }
+        cliente_id: { type: integer }
+        condicao_pagamento_id: { type: integer }
+        forma_pagamento_id: { type: integer }
+        transportadora_id: { type: integer }
+        endereco_faturamento_id: { type: integer }
+        endereco_entrega_id: { type: integer }
+        endereco_cobranca_id: { type: integer }
+        valor_frete: { type: number }
+        observacoes_pedido: { type: string }
+        observacoes_nota_fiscal: { type: string }
+        itens:
+          type: array
+          items:
+            $ref: '#/components/schemas/ItemPedido'
+
+    Pedido:
+      type: object
+      required: [id, numero, tipo, status, data_emissao]
+      properties:
+        id:
+          type: integer
+        numero:
+          type: string
+        tipo:
+          $ref: '#/components/schemas/PedidoTipo'
+        cliente_nome:
+          type: string
+        data_emissao:
+          type: string
+          format: date-time
+        status:
+          $ref: '#/components/schemas/PedidoStatus'
+        status_erp:
+          oneOf:
+            - $ref: '#/components/schemas/PedidoStatusErp'
+            - type: 'null'
+        status_erp_label:
+          type:
+            - string
+            - 'null'
+          example: Aberto
+        total_liquido:
+          type: number
+
+    PedidoCursorEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/APIResponse'
+        - type: object
+          properties:
+            data:
+              allOf:
+                - $ref: '#/components/schemas/CursorPage'
+                - type: object
+                  properties:
+                    items:
+                      type: array
+                      items:
+                        $ref: '#/components/schemas/Pedido'
+
+    PedidoDetalhe:
+      allOf:
+        - $ref: '#/components/schemas/Pedido'
+        - type: object
+          properties:
+            codigo_erp: { type: string }
+            numero_cliente: { type: string }
+            cliente:
+              type: object
+              properties:
+                id: { type: integer }
+                nome_razao_social: { type: string }
+                cnpj_cpf: { type: string }
+            empresa:
+              type: object
+              properties:
+                id: { type: integer }
+                nome: { type: string }
+            condicao_pagamento:
+              type:
+                - object
+                - 'null'
+            forma_pagamento:
+              type:
+                - object
+                - 'null'
+            transportadora:
+              type:
+                - object
+                - 'null'
+            valor_frete: { type: number }
+            observacoes_pedido:
+              type:
+                - string
+                - 'null'
+            observacoes_nota_fiscal:
+              type:
+                - string
+                - 'null'
+            itens:
+              type: array
+              items:
+                $ref: '#/components/schemas/ItemPedido'
+            totais:
+              $ref: '#/components/schemas/PedidoTotais'
+
+    PedidoDetalheEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/APIResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/PedidoDetalhe'
+
+    # ─── CATÁLOGOS ───────────────────────────────────────
+    EmpresaCatalogo:
+      type: object
+      properties:
+        id: { type: integer }
+        nome: { type: string }
+        codigo_erp: { type: string }
+
+    EmpresaCursorEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/APIResponse'
+        - type: object
+          properties:
+            data:
+              allOf:
+                - $ref: '#/components/schemas/CursorPage'
+                - type: object
+                  properties:
+                    items:
+                      type: array
+                      items:
+                        $ref: '#/components/schemas/EmpresaCatalogo'
+
+    CondicaoPagamento:
+      type: object
+      properties:
+        id: { type: integer }
+        codigo_erp: { type: string }
+        descricao: { type: string }
+        quantidade_parcelas: { type: integer }
+        prazo_medio: { type: integer }
+
+    CondicaoPagamentoCursorEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/APIResponse'
+        - type: object
+          properties:
+            data:
+              allOf:
+                - $ref: '#/components/schemas/CursorPage'
+                - type: object
+                  properties:
+                    items:
+                      type: array
+                      items:
+                        $ref: '#/components/schemas/CondicaoPagamento'
+
+    FormaPagamento:
+      type: object
+      properties:
+        id: { type: integer }
+        codigo_erp: { type: string }
+        descricao: { type: string }
+
+    FormaPagamentoCursorEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/APIResponse'
+        - type: object
+          properties:
+            data:
+              allOf:
+                - $ref: '#/components/schemas/CursorPage'
+                - type: object
+                  properties:
+                    items:
+                      type: array
+                      items:
+                        $ref: '#/components/schemas/FormaPagamento'
+
+    Transportadora:
+      type: object
+      properties:
+        id: { type: integer }
+        codigo_erp: { type: string }
+        nome_razao: { type: string }
+        cnpj_cpf: { type: string }
+
+    TransportadoraCursorEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/APIResponse'
+        - type: object
+          properties:
+            data:
+              allOf:
+                - $ref: '#/components/schemas/CursorPage'
+                - type: object
+                  properties:
+                    items:
+                      type: array
+                      items:
+                        $ref: '#/components/schemas/Transportadora'
+
+    TabelaPreco:
+      type: object
+      properties:
+        id: { type: integer }
+        codigo_erp: { type: string }
+        descricao: { type: string }
+        vigencia:
+          type:
+            - string
+            - 'null'
+          format: date-time
+          description: '# TODO: derivar de tabela_preco_item.validade_inicial/final'
+
+    TabelaPrecoCursorEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/APIResponse'
+        - type: object
+          properties:
+            data:
+              allOf:
+                - $ref: '#/components/schemas/CursorPage'
+                - type: object
+                  properties:
+                    items:
+                      type: array
+                      items:
+                        $ref: '#/components/schemas/TabelaPreco'
+
+    Produto:
+      type: object
+      properties:
+        id: { type: integer }
+        codigo_erp: { type: string }
+        descricao: { type: string }
+        familia: { type: string }
+        marca: { type: string }
+        unidade: { type: string }
+        preco_venda: { type: number }
+        stock:
+          type: number
+          description: Soma das quantidades registradas em item_estoque para o produto.
+        tabela_preco_padrao_id:
+          type: integer
+          description: '# TODO: schema não tem "tabela padrão do produto"'
+
+    ProdutoCursorEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/APIResponse'
+        - type: object
+          properties:
+            data:
+              allOf:
+                - $ref: '#/components/schemas/CursorPage'
+                - type: object
+                  properties:
+                    items:
+                      type: array
+                      items:
+                        $ref: '#/components/schemas/Produto'
+
+    # ─── AGENDA ──────────────────────────────────────────
+    AgendaCreate:
+      type: object
+      required: [titulo, data_agendada]
+      properties:
+        titulo: { type: string }
+        descricao: { type: string }
+        codigo_erp_cliente:
+          type: string
+          description: Código ERP do cliente vinculado (opcional). O backend resolve via `cliente.codigo_erp`.
+        data_agendada:
+          type: string
+          format: date-time
+        hora_agendada:
+          type:
+            - string
+            - 'null'
+          example: "14:30:00"
+
+    Agenda:
+      allOf:
+        - $ref: '#/components/schemas/AgendaCreate'
+        - type: object
+          properties:
+            id: { type: integer }
+            cod_usuario: { type: integer }
+            concluida: { type: boolean }
+            dt_inclusao:
+              type: string
+              format: date-time
+            dt_alteracao:
+              type: string
+              format: date-time
+
+    AgendaEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/APIResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/Agenda'
+
+    AgendaCursorEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/APIResponse'
+        - type: object
+          properties:
+            data:
+              allOf:
+                - $ref: '#/components/schemas/CursorPage'
+                - type: object
+                  properties:
+                    items:
+                      type: array
+                      items:
+                        $ref: '#/components/schemas/Agenda'
+
+    # ─── TAREFA ──────────────────────────────────────────
+    TarefaCreate:
+      type: object
+      required: [titulo]
+      properties:
+        titulo: { type: string }
+        descricao: { type: string }
+        prazo:
+          type:
+            - string
+            - 'null'
+          format: date-time
+        prioridade:
+          type: string
+          enum: [baixa, media, alta]
+          default: media
+
+    Tarefa:
+      allOf:
+        - $ref: '#/components/schemas/TarefaCreate'
+        - type: object
+          properties:
+            id: { type: integer }
+            cod_usuario: { type: integer }
+            concluida: { type: boolean }
+            dt_inclusao:
+              type: string
+              format: date-time
+            dt_alteracao:
+              type: string
+              format: date-time
+
+    TarefaEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/APIResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/Tarefa'
+
+    TarefaCursorEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/APIResponse'
+        - type: object
+          properties:
+            data:
+              allOf:
+                - $ref: '#/components/schemas/CursorPage'
+                - type: object
+                  properties:
+                    items:
+                      type: array
+                      items:
+                        $ref: '#/components/schemas/Tarefa'                  

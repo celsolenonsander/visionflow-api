@@ -2,12 +2,18 @@ package httpapi
 
 import (
 	"encoding/json"
+	"errors"
+	"io"
+	"net/mail"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/celsolenonsander/visionflow-api/internal/db"
 	"github.com/celsolenonsander/visionflow-api/internal/models"
@@ -15,16 +21,18 @@ import (
 )
 
 type Handler struct {
-	Service   *service.Service
-	Pool      *db.Pool
-	JWTSecret string
+	Service            *service.Service
+	Pool               *db.Pool
+	JWTSecret          string
+	corsAllowedOrigins []string
 }
 
-func NewHandler(s *service.Service, pool *db.Pool, jwtSecret string) *Handler {
+func NewHandler(s *service.Service, pool *db.Pool, jwtSecret string, corsAllowedOrigins []string) *Handler {
 	return &Handler{
-		Service:   s,
-		Pool:      pool,
-		JWTSecret: jwtSecret,
+		Service:            s,
+		Pool:               pool,
+		JWTSecret:          jwtSecret,
+		corsAllowedOrigins: corsAllowedOrigins,
 	}
 }
 
@@ -43,7 +51,17 @@ func bad(w http.ResponseWriter, status int, code, msg string) {
 }
 
 func decode(w http.ResponseWriter, r *http.Request, v interface{}) bool {
-	if err := json.NewDecoder(r.Body).Decode(v); err != nil {
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(v); err != nil {
+		bad(w, http.StatusBadRequest, "REQUISICAO_INVALIDA", "JSON inválido.")
+		return false
+	}
+	var extra interface{}
+	if err := decoder.Decode(&extra); err == nil {
+		bad(w, http.StatusBadRequest, "REQUISICAO_INVALIDA", "A requisição deve conter apenas um objeto JSON.")
+		return false
+	} else if !errors.Is(err, io.EOF) {
 		bad(w, http.StatusBadRequest, "REQUISICAO_INVALIDA", "JSON inválido.")
 		return false
 	}
@@ -57,10 +75,20 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &req) {
 		return
 	}
+	email, emailErr := mail.ParseAddress(req.Email)
+	if strings.TrimSpace(req.Email) == "" || emailErr != nil ||
+		email.Address != req.Email || req.Senha == "" {
+		bad(w, http.StatusBadRequest, "REQUISICAO_INVALIDA", "email válido e senha são obrigatórios.")
+		return
+	}
 
 	u, err := h.Service.Login(r.Context(), req.Email, req.Senha)
 	if err != nil {
-		bad(w, http.StatusUnauthorized, "CREDENCIAIS_INVALIDAS", err.Error())
+		if errors.Is(err, service.ErrInvalidCredentials) {
+			bad(w, http.StatusUnauthorized, "CREDENCIAIS_INVALIDAS", "E-mail ou senha incorretos.")
+			return
+		}
+		bad(w, http.StatusInternalServerError, "ERRO_INTERNO", "Erro inesperado no servidor.")
 		return
 	}
 
@@ -81,146 +109,119 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]bool{"ok": true}, nil)
-}
-
-// ─── HOME / SHELL ──────────────────────────────────────────
-
-func (h *Handler) Indicadores(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, 200, h.Service.Indicadores(), nil)
-}
-
-func (h *Handler) ShellEmpresa(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, 200, h.Service.ShellEmpresa(), nil)
-}
-
-func (h *Handler) ShellNotificacoes(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, 200, h.Service.NotificacoesCount(), nil)
-}
-
-func (h *Handler) Notificacoes(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, 200, h.Service.Notificacoes(), nil)
+	writeJSON(w, http.StatusOK, nil, nil)
 }
 
 // ─── CLIENTES ──────────────────────────────────────────────
 
 func (h *Handler) Clientes(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := TenantID(r.Context())
+	tenantID, empresaID, _, ok := authenticatedIDs(r)
 	if !ok {
-		bad(w, 401, "SEM_CONTEXTO", "Tenant não resolvido.")
+		bad(w, 401, "NAO_AUTENTICADO", "Contexto de autenticação inválido.")
 		return
 	}
-	empresaID, _ := EmpresaID(r.Context())
-
-	cursor := 0
-	if c := r.URL.Query().Get("cursor"); c != "" {
-		if v, err := strconv.Atoi(c); err == nil {
-			cursor = v
-		}
-	}
-
-	limit := 20
-	if l := r.URL.Query().Get("limit"); l != "" {
-		if v, err := strconv.Atoi(l); err == nil && v > 0 && v <= 100 {
-			limit = v
-		}
-	}
-
-	clientes, nextCursor, err := h.Service.Clientes(
-		r.Context(), tenantID, empresaID, limit, cursor,
-	)
+	limit, cursor, err := validPage(r.URL.Query().Get("limit"), r.URL.Query().Get("cursor"))
 	if err != nil {
-		bad(w, 500, "ERRO_LISTAR_CLIENTES", err.Error())
+		bad(w, 400, "REQUISICAO_INVALIDA", err.Error())
 		return
 	}
-
-	writeJSON(w, 200, models.CursorPage[models.Cliente]{
-		Items:      clientes,
-		NextCursor: nextCursor,
-	}, nil)
+	status := r.URL.Query().Get("status")
+	if status != "" && status != "ativo" && status != "inativo" && status != "prospect" {
+		bad(w, 400, "REQUISICAO_INVALIDA", "status deve ser ativo, inativo ou prospect.")
+		return
+	}
+	items, next, err := h.Service.ClientesAPI(r.Context(), tenantID, empresaID,
+		r.URL.Query().Get("busca"), status, limit, cursor)
+	if err != nil {
+		writeServiceError(w, err, "Não foi possível listar clientes.")
+		return
+	}
+	writeJSON(w, 200, map[string]any{"items": items, "nextCursor": cursorValue(next)}, nil)
 }
 
 func (h *Handler) Cliente(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.Atoi(pathParam(r.URL.Path, "/clientes/"))
-	if err != nil {
-		bad(w, 400, "ID_INVALIDO", "ID do cliente inválido.")
-		return
-	}
-
-	tenantID, ok := TenantID(r.Context())
+	tenantID, empresaID, _, ok := authenticatedIDs(r)
 	if !ok {
-		bad(w, 401, "SEM_CONTEXTO", "Tenant não resolvido.")
+		bad(w, 401, "NAO_AUTENTICADO", "Contexto de autenticação inválido.")
 		return
 	}
-	empresaID, _ := EmpresaID(r.Context())
-
-	c, err := h.Service.Cliente(r.Context(), tenantID, empresaID, id)
+	id, err := requestID(chi.URLParam(r, "id"))
 	if err != nil {
-		bad(w, 404, "CLIENTE_NAO_ENCONTRADO", "Cliente não encontrado.")
+		bad(w, 400, "REQUISICAO_INVALIDA", "ID do cliente inválido.")
 		return
 	}
-
+	c, err := h.Service.ClienteAPI(r.Context(), tenantID, empresaID, id)
+	if err != nil {
+		writeServiceError(w, err, "Não foi possível consultar o cliente.")
+		return
+	}
 	writeJSON(w, 200, c, nil)
 }
 
 func (h *Handler) ClienteCNPJ(w http.ResponseWriter, r *http.Request) {
-	cnpj := pathParam(r.URL.Path, "/clientes/cnpj/")
-	c, ok := h.Service.ClienteCNPJ(cnpj)
-	if !ok {
-		bad(w, 404, "CNPJ_NAO_ENCONTRADO", "CNPJ não encontrado.")
+	c, err := h.Service.ConsultarCNPJ(r.Context(), chi.URLParam(r, "cnpj"))
+	if err != nil {
+		writeServiceError(w, err, "Não foi possível consultar o CNPJ.")
 		return
 	}
 	writeJSON(w, 200, c, nil)
 }
 
-// ─── PEDIDOS ───────────────────────────────────────────────
-
-func (h *Handler) Pedidos(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, 200, h.Service.Pedidos(), nil)
-}
-
-func (h *Handler) Pedido(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.Atoi(pathParam(r.URL.Path, "/pedidos/"))
-	if err != nil {
-		bad(w, 400, "ID_INVALIDO", "ID do pedido inválido.")
-		return
-	}
-	p, ok := h.Service.Pedido(id)
-	if !ok {
-		bad(w, 404, "PEDIDO_NAO_ENCONTRADO", "Pedido não encontrado.")
-		return
-	}
-	writeJSON(w, 200, p, nil)
-}
-
-func (h *Handler) SalvarPedido(w http.ResponseWriter, r *http.Request) {
-	var req models.PedidoRequest
-	if !decode(w, r, &req) {
-		return
-	}
-	if req.ClienteID <= 0 {
-		bad(w, 400, "CLIENTE_OBRIGATORIO", "cliente_id deve ser maior que zero.")
-		return
-	}
-	writeJSON(w, 200, h.Service.SalvarPedido(req), nil)
-}
-
-func (h *Handler) Orcamentos(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, 200, h.Service.Orcamentos(), nil)
-}
-
-// ─── AGENDA / TAREFA ───────────────────────────────────────
-
-func (h *Handler) Agenda(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, 200, h.Service.Agenda(), nil)
-}
-
-func (h *Handler) Tarefas(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, 200, h.Service.Tarefas(), nil)
-}
-
 // ─── HELPERS ───────────────────────────────────────────────
 
-func pathParam(path, prefix string) string {
-	return strings.TrimPrefix(path, prefix)
+func authenticatedIDs(r *http.Request) (int, int, int, bool) {
+	userID, userOK := UserID(r.Context())
+	tenantID, tenantOK := TenantID(r.Context())
+	empresaID, empresaOK := EmpresaID(r.Context())
+	return tenantID, empresaID, userID, userOK && tenantOK && empresaOK
+}
+
+func requestID(value string) (int, error) {
+	id, err := strconv.Atoi(value)
+	if err != nil || id <= 0 {
+		return 0, errors.New("identificador inválido")
+	}
+	return id, nil
+}
+
+func validPage(limitText, cursorText string) (int, int, error) {
+	limit := 20
+	if limitText != "" {
+		value, err := strconv.Atoi(limitText)
+		if err != nil || value < 1 || value > 100 {
+			return 0, 0, errors.New("limit deve estar entre 1 e 100.")
+		}
+		limit = value
+	}
+	cursor := 0
+	if cursorText != "" {
+		value, err := strconv.Atoi(cursorText)
+		if err != nil || value < 1 {
+			return 0, 0, errors.New("cursor deve ser um identificador positivo.")
+		}
+		cursor = value
+	}
+	return limit, cursor, nil
+}
+
+func writeServiceError(w http.ResponseWriter, err error, internalMessage string) {
+	if errors.Is(err, service.ErrInvalidInput) {
+		message := strings.TrimPrefix(err.Error(), service.ErrInvalidInput.Error()+": ")
+		bad(w, http.StatusBadRequest, "REQUISICAO_INVALIDA", message)
+		return
+	}
+	if errors.Is(err, service.ErrDuplicateResource) {
+		bad(w, http.StatusConflict, "RECURSO_DUPLICADO", "Já existe um recurso com estes dados.")
+		return
+	}
+	if errors.Is(err, pgx.ErrNoRows) {
+		bad(w, http.StatusNotFound, "RECURSO_NAO_ENCONTRADO", "Recurso não encontrado.")
+		return
+	}
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+		bad(w, http.StatusConflict, "RECURSO_DUPLICADO", "Já existe um recurso com estes dados.")
+		return
+	}
+	bad(w, http.StatusInternalServerError, "ERRO_INTERNO", internalMessage)
 }

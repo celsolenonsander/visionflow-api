@@ -56,9 +56,9 @@ func run() error {
 		cfg.DBHost, cfg.DBPort, cfg.DBName)
 
 	// 5. Service e Handler
-	//    (Service ainda mock; vai receber pool no Bloco 4)
+	//    Service e handlers compartilham o pool PostgreSQL.
 	svc := service.New(pool)
-	handler := httpapi.NewHandler(svc, pool, cfg.JWTSecret)
+	handler := httpapi.NewHandler(svc, pool, cfg.JWTSecret, cfg.CORSAllowedOrigins)
 
 	// 6. Router
 	router := handler.Routes()
