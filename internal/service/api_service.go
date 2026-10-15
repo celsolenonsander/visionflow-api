@@ -134,8 +134,7 @@ func pedidoDetalhe(ctx context.Context, tx pgx.Tx, id int) (map[string]any, erro
 		       CASE WHEN p.data_emissao IS NULL THEN NULL ELSE
 		         to_char(p.data_emissao::timestamp AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS"Z"') END AS data_emissao,
 		       CASE WHEN p.data_entrega IS NULL THEN NULL ELSE
-		         to_char(p.data_entrega::timestamp AT TIME ZONE 'UTC',
-		           'YYYY-MM-DD"T"HH24:MI:SS"Z"') END AS data_entrega,
+		         to_char(p.data_entrega, 'YYYY-MM-DD') END AS data_entrega,
 		       c.codigo AS cliente_id,c.nome_razao_social AS cliente_nome,c.cnpj_cpf AS cliente_cnpj_cpf,
 		       p.valor_frete,p.observacoes_pedido,p.observacoes_nota_fiscal,
 		       e.cod_empresa AS empresa_id,
@@ -235,8 +234,7 @@ func pedidoItens(ctx context.Context, tx pgx.Tx, codigoErpPedido string) ([]map[
 		       pi.valor_desconto_comercial::double precision AS valor_desconto_comercial,
 		       pi.valor_total_produtos_liquido,
 		       CASE WHEN COALESCE(pi.data_entrega,p.data_entrega) IS NULL THEN NULL ELSE
-		         to_char(COALESCE(pi.data_entrega,p.data_entrega)::timestamp AT TIME ZONE 'UTC',
-		           'YYYY-MM-DD"T"HH24:MI:SS"Z"') END AS data_entrega,
+		         to_char(COALESCE(pi.data_entrega,p.data_entrega), 'YYYY-MM-DD') END AS data_entrega,
 		       pi.observacao_item,
 		       tp.codigo AS price_table_id,tp.descricao AS price_table_name,
 		       CASE WHEN validity.validade_inicial IS NULL THEN NULL ELSE

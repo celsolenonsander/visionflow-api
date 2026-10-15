@@ -1983,7 +1983,7 @@ components:
           type:
             - string
             - 'null'
-          format: date-time
+          format: date
         observacao_item:
           type:
             - string
@@ -2081,6 +2081,11 @@ components:
         data_emissao:
           type: string
           format: date-time
+        data_entrega:
+          type:
+            - string
+            - 'null'
+          format: date
         status:
           $ref: '#/components/schemas/PedidoStatus'
         status_erp:
