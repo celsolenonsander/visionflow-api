@@ -409,29 +409,3 @@ corrigindo, ou apague o banco e recrie (`reset_db.sh`).
 
 Você provavelmente está conectado como superuser (`postgres`), que
 **ignora RLS**. Conecte com o usuário da API (`epare`).
-
-### Porta 8080 ocupada
-
-```bash
-# Ver quem está usando
-sudo lsof -i :8080
-
-# Ou rodar em outra porta
-SERVER_PORT=8081 go run ./cmd/api
-```
-
----
-
-## Limitações e validação
-
-- `POST /pedidos` cria pedidos/orçamentos; o contrato não fornece um
-  identificador para distinguir uma atualização.
-- `tabela_preco.vigencia` é aproximada pela primeira validade de item da tabela;
-  sua semântica precisa ser confirmada com o negócio.
-- `DELETE /pedidos/{id}` marca `apagar_dados_pedido=true`, conforme decisão
-  funcional; não apaga fisicamente pedido/itens.
-- A definição de `clientes_em_digitacao` conta clientes distintos vinculados
-  a pedidos/orçamentos com `situacao_app='em_digitacao'`.
-- Testes unitários foram adicionados, mas precisam ser executados em ambiente
-  com Go instalado. Testes de integração dependem de um PostgreSQL com todas as
-  migrations aplicadas.
