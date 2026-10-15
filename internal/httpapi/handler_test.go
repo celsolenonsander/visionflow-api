@@ -1,9 +1,124 @@
 package httpapi
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
+	"time"
+
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/celsolenonsander/visionflow-api/internal/service"
 )
 
-func TestWriteJSON(t *testing.T) {
-	// placeholder — vai ser reescrito quando tivermos mocks de Pool
+func TestExtractBearerToken(t *testing.T) {
+	tests := []struct {
+		name   string
+		header string
+		want   string
+	}{
+		{name: "empty", header: "", want: ""},
+		{name: "missing scheme", header: "abc123", want: ""},
+		{name: "valid", header: "Bearer abc123", want: "abc123"},
+		{name: "case insensitive scheme", header: "bearer abc123", want: "abc123"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			request := httptest.NewRequest(http.MethodGet, "/", nil)
+			request.Header.Set("Authorization", test.header)
+			if got := extractBearerToken(request); got != test.want {
+				t.Fatalf("extractBearerToken() = %q, want %q", got, test.want)
+			}
+		})
+	}
+}
+
+func TestParseToken(t *testing.T) {
+	secret := "test-secret"
+	handler := &Handler{JWTSecret: secret}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"sub": 42,
+		"iat": time.Now().Unix(),
+		"exp": time.Now().Add(time.Hour).Unix(),
+	})
+	signed, err := token.SignedString([]byte(secret))
+	if err != nil {
+		t.Fatalf("sign token: %v", err)
+	}
+
+	claims, err := handler.parseToken(signed)
+	if err != nil {
+		t.Fatalf("parseToken() error = %v", err)
+	}
+	if got := claims["sub"]; got != float64(42) {
+		t.Fatalf("sub = %v, want 42", got)
+	}
+
+	wrongMethod := jwt.NewWithClaims(jwt.SigningMethodHS384, jwt.MapClaims{
+		"sub": 42,
+		"exp": time.Now().Add(time.Hour).Unix(),
+	})
+	wrongSigned, err := wrongMethod.SignedString([]byte(secret))
+	if err != nil {
+		t.Fatalf("sign wrong-method token: %v", err)
+	}
+	if _, err := handler.parseToken(wrongSigned); err == nil {
+		t.Fatal("parseToken() accepted a non-HS256 token")
+	}
+}
+
+func TestWriteJSONAndLogoutEnvelope(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	writeJSON(recorder, http.StatusOK, nil, nil)
+
+	var response map[string]any
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if response["success"] != true || response["data"] != nil || response["error"] != nil {
+		t.Fatalf("unexpected success envelope: %#v", response)
+	}
+
+	recorder = httptest.NewRecorder()
+	(&Handler{}).Logout(recorder, httptest.NewRequest(http.MethodPost, "/auth/logout", nil))
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode logout response: %v", err)
+	}
+	if response["data"] != nil {
+		t.Fatalf("logout data = %#v, want null", response["data"])
+	}
+}
+
+func TestCursorValue(t *testing.T) {
+	if got := cursorValue(""); got != nil {
+		t.Fatalf("cursorValue(empty) = %#v, want nil", got)
+	}
+	if got := cursorValue("24129"); got != "24129" {
+		t.Fatalf("cursorValue(nonempty) = %#v, want %q", got, "24129")
+	}
+}
+
+func TestRoutesUsesConfiguredCORSOrigins(t *testing.T) {
+	handler := &Handler{corsAllowedOrigins: []string{"https://app.example.test"}}
+	request := httptest.NewRequest(http.MethodOptions, "/health", nil)
+	request.Header.Set("Origin", "https://app.example.test")
+	request.Header.Set("Access-Control-Request-Method", http.MethodGet)
+	recorder := httptest.NewRecorder()
+
+	handler.Routes().ServeHTTP(recorder, request)
+
+	if got := recorder.Header().Get("Access-Control-Allow-Origin"); got != "https://app.example.test" {
+		t.Fatalf("Access-Control-Allow-Origin = %q, want configured origin", got)
+	}
+}
+
+func TestWriteServiceErrorForInvalidInput(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	writeServiceError(recorder, service.InvalidInput("campo inválido"), "unexpected")
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusBadRequest)
+	}
 }

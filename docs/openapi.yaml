@@ -144,7 +144,11 @@ paths:
         Contadores e somas exibidos na Home. Todos derivados (sem tabela própria).
         - `pending_agendas` e `pending_tasks` derivam de `agenda` e `tarefa`.
         - `unread_notifications` deriva de `notificacao` (lida = false).
-        - `sales_this_month` e `sales_today` somam `pedido_item.valor_total_produtos_liquido`.
+        - `sales_this_month` e `sales_today` somam
+          `pedido_item.valor_total_produtos_liquido` de pedidos (não orçamentos)
+          que não foram marcados para remoção.
+        - `clientes_em_digitacao` conta clientes distintos com pedido ou orçamento
+          em `situacao_app = em_digitacao`, usando `pedido.codigo_erp_cliente`.
       responses:
         '200':
           description: Indicadores
@@ -2195,6 +2199,9 @@ components:
         marca: { type: string }
         unidade: { type: string }
         preco_venda: { type: number }
+        stock:
+          type: number
+          description: Soma das quantidades registradas em item_estoque para o produto.
         tabela_preco_padrao_id:
           type: integer
           description: '# TODO: schema não tem "tabela padrão do produto"'

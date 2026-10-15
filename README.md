@@ -4,9 +4,11 @@ API Go para o sistema **VisionFlow** — plataforma SaaS multi-tenant para
 força de vendas, com suporte a **white label** e integração com ERP.
 
 **Estado atual:**
-- 🔵 Camada HTTP funcionando com **dados mockados**
-- 🟢 Banco de dados PostgreSQL estruturado (62 tabelas + RLS)
-- 🟡 Migração dos mocks para o banco **em andamento**
+- As 40 operações do OpenAPI têm rotas e handlers registrados; as pendências de
+  regra/semântica estão listadas em “Limitações e validação” e no relatório.
+- CEP e CNPJ usam serviços externos (ViaCEP e BrasilAPI).
+- Testes unitários foram adicionados, mas não puderam ser executados neste
+  ambiente porque o executável Go não está disponível; build não verificado.
 
 ---
 
@@ -135,9 +137,12 @@ DB_SSLMODE=disable
 
 SERVER_PORT=8080
 JWT_SECRET=<STRING_ALEATORIA_32_CHARS>
-JWT_EXPIRATION_HOURS=24
+CORS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
 APP_ENV=development
 ```
+
+Os tokens de login expiram em 8 horas, conforme o contrato OpenAPI. A
+configuração `JWT_EXPIRATION_HOURS` não é lida pela API.
 
 Para gerar uma chave JWT forte:
 
@@ -179,7 +184,6 @@ flyway -configFiles=./db/flyway.conf migrate
 ### 4. Rodar a API
 
 ```bash
-go mod tidy
 go run ./cmd/api
 ```
 
@@ -203,39 +207,52 @@ Serviços disponíveis:
 ### Negócio
 
 - `GET  /home/indicadores`
-- `GET  /clientes`
+- `GET/POST /clientes`
 - `GET  /clientes/{id}`
+- `PUT/DELETE /clientes/{id}`
 - `GET  /clientes/cnpj/{cnpj}`
-- `GET  /pedidos`
-- `POST /pedidos`
+- `GET  /clientes/{id}/enderecos`
+- `POST /clientes/{id}/enderecos`
+- `DELETE /clientes/{id}/enderecos/{enderecoId}`
+- `GET  /clientes/{id}/contas-receber`
+- `GET  /cep/{cep}`
+- `GET/POST /pedidos`
 - `GET  /pedidos/{id}`
-- `GET  /orcamentos`
-- `GET  /agenda`
-- `GET  /tarefas`
+- `DELETE /pedidos/{id}`
+- `GET  /orcamentos`, `/orcamentos/{id}`
+- `GET  /empresas`, `/condicoes-pagamento`, `/formas-pagamento`
+- `GET  /transportadoras`, `/tabelas-preco`, `/produtos`
+- `GET/POST /agenda`, `GET/PUT /agenda/{id}`, `PATCH /agenda/{id}/concluir`
+- `GET/POST /tarefas`, `GET/PUT /tarefas/{id}`, `PATCH /tarefas/{id}/concluir`
 - `GET  /notificacoes`
+- `GET  /notificacoes/nao-lidas/count`
 
 ### Shell (UI)
 
 - `GET /shell/empresa`
 - `GET /shell/notificacoes`
 
-> 💡 A camada de serviço usa **mocks** nesta versão. O contrato HTTP foi
-> separado da persistência para permitir a troca posterior por PostgreSQL.
+As rotas de negócio usam PostgreSQL com escopo de tenant/empresa via RLS.
+O login valida o hash com `pgcrypto`; aplique `V011__pgcrypto_password_validation.sql`
+antes de usar a autenticação. O Swagger UI serve uma cópia embutida de
+`docs/openapi.yaml`.
 
 ---
 
 ## Autenticação
 
-### Login mock (desenvolvimento)
+### Login
 
 ```json
 {
-  "email": "admin@visionflow.app",
-  "senha": "123456"
+  "email": "usuario@empresa.com.br",
+  "senha": "<senha cadastrada>"
 }
 ```
 
-O login devolve um **JWT**. Endpoints protegidos aceitam:
+O login consulta `usuario`, `usuario_empresa`, `empresa` e `tenant`, valida a
+senha com `crypt` do PostgreSQL e devolve um JWT. Os endpoints protegidos
+aceitam:
 
 ```http
 Authorization: Bearer <token>
@@ -392,22 +409,3 @@ corrigindo, ou apague o banco e recrie (`reset_db.sh`).
 
 Você provavelmente está conectado como superuser (`postgres`), que
 **ignora RLS**. Conecte com o usuário da API (`epare`).
-
-### Porta 8080 ocupada
-
-```bash
-# Ver quem está usando
-sudo lsof -i :8080
-
-# Ou rodar em outra porta
-SERVER_PORT=8081 go run ./cmd/api
-```
-
----
-
-## Próximos passos
-
-- [ ] Migrar handlers de mock para PostgreSQL
-- [ ] Implementar middleware de tenant (`SET LOCAL app.cod_tenant`)
-- [ ] Adicionar testes de integração
-- [ ] Deploy em produção (Cloudflare Tunnel)

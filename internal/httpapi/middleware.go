@@ -87,7 +87,7 @@ func extractBearerToken(r *http.Request) string {
 
 func (h *Handler) parseToken(tokenStr string) (jwt.MapClaims, error) {
 	token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (interface{}, error) {
-		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+		if t.Method != jwt.SigningMethodHS256 {
 			return nil, jwt.ErrSignatureInvalid
 		}
 		return []byte(h.JWTSecret), nil
@@ -109,9 +109,16 @@ func extractUserID(claims jwt.MapClaims) (int, error) {
 	}
 	switch v := sub.(type) {
 	case float64:
+		if v <= 0 || v != float64(int(v)) {
+			return 0, jwt.ErrTokenInvalidClaims
+		}
 		return int(v), nil
 	case string:
-		return strconv.Atoi(v)
+		id, err := strconv.Atoi(v)
+		if err != nil || id <= 0 {
+			return 0, jwt.ErrTokenInvalidClaims
+		}
+		return id, nil
 	default:
 		return 0, jwt.ErrTokenInvalidClaims
 	}
@@ -121,10 +128,15 @@ func extractUserID(claims jwt.MapClaims) (int, error) {
 // do usuário. Roda FORA do RLS (usa Pool direto).
 func (h *Handler) resolveTenantEmpresa(ctx context.Context, userID int) (int, int, error) {
 	const q = `
-		SELECT cod_tenant, cod_empresa
-		FROM usuario_empresa
-		WHERE cod_usuario = $1
-		ORDER BY empresa_padrao DESC, cod_empresa ASC
+		SELECT ue.cod_tenant, ue.cod_empresa
+		FROM usuario_empresa ue
+		JOIN usuario u ON u.cod_usuario=ue.cod_usuario
+		JOIN tenant t ON t.cod_tenant=ue.cod_tenant
+		JOIN empresa e ON e.cod_tenant=ue.cod_tenant AND e.cod_empresa=ue.cod_empresa
+		WHERE ue.cod_usuario = $1
+		  AND ue.cod_tenant=u.cod_tenant
+		  AND u.ativo=true AND t.ativo=true AND e.ativo=true
+		ORDER BY ue.empresa_padrao DESC, ue.cod_empresa ASC
 		LIMIT 1
 	`
 	var tenantID, empresaID int
