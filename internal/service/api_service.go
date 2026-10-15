@@ -63,6 +63,16 @@ func parseDateTime(value string) (time.Time, error) {
 	return parsed.UTC(), nil
 }
 
+func parseDate(value string) (time.Time, error) {
+	if t, err := time.Parse("2006-01-02", value); err == nil {
+		return t, nil
+	}
+	if t, err := time.Parse(time.RFC3339, value); err == nil {
+		return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC), nil
+	}
+	return time.Time{}, InvalidInput("data_entrega deve estar no formato YYYY-MM-DD")
+}
+
 func (s *Service) PedidosListarAPI(ctx context.Context, tenantID, empresaID int, status string, clienteID *int, limit, cursor int, orcamento, includeCanceled bool) ([]map[string]any, string, error) {
 	var result []map[string]any
 	var next string
@@ -424,7 +434,7 @@ func preparePedido(input models.PedidoCreate, empresaID int) (models.PedidoCreat
 	}
 	var delivery *time.Time
 	if input.DataEntrega != nil {
-		parsed, err := parseDateTime(*input.DataEntrega)
+		parsed, err := parseDate(*input.DataEntrega)
 		if err != nil {
 			return input, time.Time{}, nil, "", err
 		}
@@ -663,7 +673,7 @@ func insertPedidoItems(ctx context.Context, tx pgx.Tx, tenantID, empresaID int, 
 		}
 		var dataEntrega any = orderDelivery
 		if item.DataEntrega != nil {
-			data, err := parseDateTime(*item.DataEntrega)
+			data, err := parseDate(*item.DataEntrega)
 			if err != nil {
 				return err
 			}
