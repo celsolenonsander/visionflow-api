@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: visionflow-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: epare_forca_de_vendas
+      POSTGRES_USER: epare
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Defina DB_PASSWORD no arquivo .env}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U epare -d epare_forca_de_vendas"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres_data:
