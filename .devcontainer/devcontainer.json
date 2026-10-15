@@ -1,0 +1,31 @@
+{
+  "name": "VisionFlow API",
+  "dockerComposeFile": "../compose.yaml",
+  "service": "workspace",
+  "workspaceFolder": "/workspaces/visionflow-api",
+  "runServices": ["postgres", "workspace"],
+  "shutdownAction": "stopCompose",
+  "forwardPorts": [8080, 5432],
+  "portsAttributes": {
+    "8080": {
+      "label": "VisionFlow API",
+      "onAutoForward": "notify"
+    },
+    "5432": {
+      "label": "PostgreSQL",
+      "onAutoForward": "silent"
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "golang.go",
+        "mtxr.sqltools",
+        "mtxr.sqltools-driver-pg",
+        "humao.rest-client"
+      ]
+    }
+  },
+  "postCreateCommand": "bash .devcontainer/setup.sh",
+  "remoteUser": "codespace"
+}
