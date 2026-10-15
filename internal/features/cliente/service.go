@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/mail"
 	"strings"
 	"time"
 
@@ -177,6 +178,22 @@ func validCliente(input models.ClienteCreate) error {
 	if input.TipoPessoa != "PF" && input.TipoPessoa != "PJ" {
 		return apperrors.InvalidInput("tipo_pessoa deve ser PF ou PJ")
 	}
+	if strings.TrimSpace(input.CNPJCPF) != "" {
+		document := digitsOnly(input.CNPJCPF)
+		expectedDigits := 14
+		if input.TipoPessoa == "PF" {
+			expectedDigits = 11
+		}
+		if len(document) != expectedDigits {
+			return apperrors.InvalidInput(fmt.Sprintf("cnpj_cpf deve conter %d dígitos para tipo_pessoa %s", expectedDigits, input.TipoPessoa))
+		}
+	}
+	if email := strings.TrimSpace(input.EmailContatoComprador); email != "" {
+		parsed, err := mail.ParseAddress(email)
+		if err != nil || parsed.Address != email {
+			return apperrors.InvalidInput("email_contato_comprador inválido")
+		}
+	}
 	for _, field := range []struct {
 		value string
 		name  string
@@ -209,14 +226,14 @@ func bancoTipoPessoa(value string) string {
 
 func bancoTipoEndereco(value string) (string, error) {
 	switch value {
-	case "cobranca":
+	case "C", "cobranca":
 		return "C", nil
-	case "entrega":
+	case "E", "entrega":
 		return "E", nil
-	case "ambos":
+	case "A", "ambos":
 		return "A", nil
 	default:
-		return "", apperrors.InvalidInput("tipo_endereco deve ser cobranca, entrega ou ambos")
+		return "", apperrors.InvalidInput("tipo_endereco deve ser C, E ou A")
 	}
 }
 

@@ -26,7 +26,7 @@ func (r *Repository) List(ctx context.Context, tx pgx.Tx, tenantID, empresaID, u
 		       prioridade
 		FROM tarefa
 		WHERE cod_tenant=$1 AND cod_empresa=$2 AND cod_usuario=$3 AND codigo>$4
-		  AND ($5::boolean IS NULL OR concluida=$5) AND ($6='' OR prioridade=$6)
+		  AND deletado_em IS NULL AND ($5::boolean IS NULL OR concluida=$5) AND ($6='' OR prioridade=$6)
 		ORDER BY codigo LIMIT $7`, tenantID, empresaID, userID, cursor, completed, priority, limit+1)
 	if err != nil {
 		return nil, fmt.Errorf("listar tarefas: %w", err)
@@ -41,7 +41,7 @@ func (r *Repository) Get(ctx context.Context, tx pgx.Tx, tenantID, empresaID, us
 		       prioridade,concluida,
 		       to_char(dt_inclusao AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS"Z"') AS dt_inclusao,
 		       to_char(dt_alteracao AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS"Z"') AS dt_alteracao
-		FROM tarefa WHERE cod_tenant=$1 AND cod_empresa=$2 AND codigo=$3 AND cod_usuario=$4`,
+		FROM tarefa WHERE cod_tenant=$1 AND cod_empresa=$2 AND codigo=$3 AND cod_usuario=$4 AND deletado_em IS NULL`,
 		tenantID, empresaID, id, userID)
 	if err != nil {
 		return nil, fmt.Errorf("consultar tarefa: %w", err)
@@ -70,7 +70,7 @@ func (r *Repository) Create(ctx context.Context, tx pgx.Tx, tenantID, empresaID,
 func (r *Repository) Update(ctx context.Context, tx pgx.Tx, tenantID, empresaID, userID, id int, input models.TarefaCreate, due *time.Time) (map[string]any, error) {
 	tag, err := tx.Exec(ctx, `
 		UPDATE tarefa SET titulo=$5,descricao=$6,prazo=$7,prioridade=$8
-		WHERE cod_tenant=$1 AND cod_empresa=$2 AND codigo=$3 AND cod_usuario=$4`,
+		WHERE cod_tenant=$1 AND cod_empresa=$2 AND codigo=$3 AND cod_usuario=$4 AND deletado_em IS NULL`,
 		tenantID, empresaID, id, userID, input.Titulo, input.Descricao, due, input.Prioridade)
 	if err != nil {
 		return nil, fmt.Errorf("atualizar tarefa: %w", err)
@@ -83,7 +83,7 @@ func (r *Repository) Update(ctx context.Context, tx pgx.Tx, tenantID, empresaID,
 
 func (r *Repository) Complete(ctx context.Context, tx pgx.Tx, tenantID, empresaID, userID, id int) (map[string]any, error) {
 	tag, err := tx.Exec(ctx, `UPDATE tarefa SET concluida=true
-		WHERE cod_tenant=$1 AND cod_empresa=$2 AND codigo=$3 AND cod_usuario=$4`, tenantID, empresaID, id, userID)
+		WHERE cod_tenant=$1 AND cod_empresa=$2 AND codigo=$3 AND cod_usuario=$4 AND deletado_em IS NULL`, tenantID, empresaID, id, userID)
 	if err != nil {
 		return nil, fmt.Errorf("concluir tarefa: %w", err)
 	}
@@ -91,4 +91,17 @@ func (r *Repository) Complete(ctx context.Context, tx pgx.Tx, tenantID, empresaI
 		return nil, pgx.ErrNoRows
 	}
 	return r.Get(ctx, tx, tenantID, empresaID, userID, id)
+}
+
+func (r *Repository) Delete(ctx context.Context, tx pgx.Tx, tenantID, empresaID, userID, id int) error {
+	tag, err := tx.Exec(ctx, `UPDATE tarefa SET deletado_em=now()
+		WHERE cod_tenant=$1 AND cod_empresa=$2 AND codigo=$3 AND cod_usuario=$4 AND deletado_em IS NULL`,
+		tenantID, empresaID, id, userID)
+	if err != nil {
+		return fmt.Errorf("remover tarefa: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return pgx.ErrNoRows
+	}
+	return nil
 }

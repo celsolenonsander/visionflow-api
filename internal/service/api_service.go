@@ -63,7 +63,7 @@ func parseDateTime(value string) (time.Time, error) {
 	return parsed.UTC(), nil
 }
 
-func (s *Service) PedidosListarAPI(ctx context.Context, tenantID, empresaID int, status string, clienteID *int, limit, cursor int, orcamento bool) ([]map[string]any, string, error) {
+func (s *Service) PedidosListarAPI(ctx context.Context, tenantID, empresaID int, status string, clienteID *int, limit, cursor int, orcamento, includeCanceled bool) ([]map[string]any, string, error) {
 	var result []map[string]any
 	var next string
 	err := s.withSession(ctx, tenantID, empresaID, func(tx pgx.Tx) error {
@@ -91,10 +91,11 @@ func (s *Service) PedidosListarAPI(ctx context.Context, tenantID, empresaID int,
 			  AND ($3='' OR p.situacao_app=$3)
 			  AND ($4::integer IS NULL OR c.codigo=$4)
 			  AND COALESCE(p.apagar_dados_pedido,false)=false
+			  AND ($6::boolean OR p.situacao_app <> 'cancelado')
 			GROUP BY p.codigo,p.nosso_codigo_pedido,p.codigo_erp,p.e_um_orcamento,
 			         c.nome_razao_social,p.data_emissao,p.situacao_app,p.situacao_pedido
 			ORDER BY p.codigo ASC LIMIT $5`
-		rows, err := tx.Query(ctx, query, cursor, orcamento, status, clienteID, limit+1)
+		rows, err := tx.Query(ctx, query, cursor, orcamento, status, clienteID, limit+1, includeCanceled)
 		if err != nil {
 			return fmt.Errorf("listar pedidos: %w", err)
 		}
@@ -352,28 +353,80 @@ func resolveERPCode(ctx context.Context, tx pgx.Tx, table string, id *int) (*str
 		return nil, fmt.Errorf("referência não suportada: %s", table)
 	}
 	var code string
-	err := tx.QueryRow(ctx, fmt.Sprintf("SELECT codigo_erp FROM %s WHERE codigo=$1 AND COALESCE(ativo,true)", table), *id).Scan(&code)
+	query := fmt.Sprintf("SELECT codigo_erp FROM %s WHERE codigo=$1 AND COALESCE(ativo,true)", table)
+	if table == "cliente" {
+		query += " AND deletado_em IS NULL"
+	}
+	err := tx.QueryRow(ctx, query, *id).Scan(&code)
 	if err != nil {
 		return nil, err
 	}
 	return &code, nil
 }
 
-func (s *Service) CriarPedido(ctx context.Context, tenantID, empresaID int, input models.PedidoCreate) (map[string]any, error) {
+func preparePedido(input models.PedidoCreate, empresaID int) (models.PedidoCreate, time.Time, *time.Time, string, error) {
 	if input.Tipo != "pedido" && input.Tipo != "orcamento" {
-		return nil, InvalidInput("tipo deve ser pedido ou orcamento")
+		return input, time.Time{}, nil, "", InvalidInput("tipo deve ser pedido ou orcamento")
 	}
-	emissao, err := parseDateTime(input.DataEmissao)
-	if err != nil {
-		return nil, err
+	if input.ClienteID == nil || *input.ClienteID <= 0 {
+		return input, time.Time{}, nil, "", ErrInvalidCustomer
 	}
-	var orderDelivery *time.Time
-	if input.DataEntrega != nil {
-		value, err := parseDateTime(*input.DataEntrega)
-		if err != nil {
-			return nil, err
+	if len(input.Itens) == 0 {
+		return input, time.Time{}, nil, "", InvalidInput("ITENS_OBRIGATORIOS: o pedido deve conter ao menos um item")
+	}
+	if input.ObservacoesPedido == nil && input.Observacoes != "" {
+		input.ObservacoesPedido = &input.Observacoes
+	}
+	for index := range input.Itens {
+		item := &input.Itens[index]
+		if item.Sequence == 0 {
+			item.Sequence = index + 1
 		}
-		orderDelivery = &value
+		if item.Product.ID == 0 && item.ProdutoID > 0 {
+			item.Product.ID = item.ProdutoID
+		}
+		if item.QuantidadeInformada == 0 {
+			item.QuantidadeInformada = item.Quantidade
+		}
+		if item.SalePrice == 0 {
+			item.SalePrice = item.PrecoVenda
+		}
+		if item.OriginalPrice == 0 {
+			item.OriginalPrice = item.SalePrice
+		}
+		if item.ValorDescontoComercial == 0 {
+			item.ValorDescontoComercial = item.ValorDesconto
+		}
+	}
+	if input.CondicaoPagamentoID != nil && *input.CondicaoPagamentoID <= 0 {
+		input.CondicaoPagamentoID = nil
+	}
+	if input.FormaPagamentoID != nil && *input.FormaPagamentoID <= 0 {
+		input.FormaPagamentoID = nil
+	}
+	if input.TransportadoraID != nil && *input.TransportadoraID <= 0 {
+		input.TransportadoraID = nil
+	}
+	if input.EmpresaID != nil && *input.EmpresaID != empresaID {
+		return input, time.Time{}, nil, "", InvalidInput("empresa_id deve corresponder à empresa da sessão")
+	}
+	var emission time.Time
+	if input.DataEmissao == "" {
+		emission = time.Now().UTC().Truncate(24 * time.Hour)
+	} else {
+		parsed, err := parseDateTime(input.DataEmissao)
+		if err != nil {
+			return input, time.Time{}, nil, "", err
+		}
+		emission = parsed
+	}
+	var delivery *time.Time
+	if input.DataEntrega != nil {
+		parsed, err := parseDateTime(*input.DataEntrega)
+		if err != nil {
+			return input, time.Time{}, nil, "", err
+		}
+		delivery = &parsed
 	}
 	status := "em_digitacao"
 	if input.Status != nil {
@@ -382,27 +435,41 @@ func (s *Service) CriarPedido(ctx context.Context, tenantID, empresaID int, inpu
 	switch status {
 	case "em_digitacao", "aguardando_aprovacao", "aprovado", "cancelado":
 	default:
-		return nil, InvalidInput("status inválido")
+		return input, time.Time{}, nil, "", InvalidInput("status inválido")
 	}
-	if input.EmpresaID != nil && *input.EmpresaID != empresaID {
-		return nil, InvalidInput("empresa_id deve corresponder à empresa da sessão")
+	return input, emission, delivery, status, nil
+}
+
+func (s *Service) CriarPedido(ctx context.Context, tenantID, empresaID int, input models.PedidoCreate) (map[string]any, error) {
+	input, emissao, orderDelivery, status, err := preparePedido(input, empresaID)
+	if err != nil {
+		return nil, err
 	}
 	var result map[string]any
 	err = s.withSession(ctx, tenantID, empresaID, func(tx pgx.Tx) error {
 		customerCode, err := resolveERPCode(ctx, tx, "cliente", input.ClienteID)
 		if err != nil {
-			return fmt.Errorf("cliente não encontrado: %w", err)
+			return fmt.Errorf("%w: %v", ErrInvalidCustomer, err)
 		}
 		conditionCode, err := resolveERPCode(ctx, tx, "condicao_pagamento", input.CondicaoPagamentoID)
 		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return InvalidInput("condição de pagamento inválida")
+			}
 			return fmt.Errorf("condição de pagamento não encontrada: %w", err)
 		}
 		methodCode, err := resolveERPCode(ctx, tx, "forma_pagamento", input.FormaPagamentoID)
 		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return InvalidInput("forma de pagamento inválida")
+			}
 			return fmt.Errorf("forma de pagamento não encontrada: %w", err)
 		}
 		carrierCode, err := resolveERPCode(ctx, tx, "transportadora", input.TransportadoraID)
 		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return InvalidInput("transportadora inválida")
+			}
 			return fmt.Errorf("transportadora não encontrada: %w", err)
 		}
 		addressCodes := make([]*string, 3)
@@ -445,62 +512,8 @@ func (s *Service) CriarPedido(ctx context.Context, tenantID, empresaID int, inpu
 		if err != nil {
 			return fmt.Errorf("criar pedido: %w", err)
 		}
-		sequences := make(map[int]struct{}, len(input.Itens))
-		for index, item := range input.Itens {
-			if item.Sequence <= 0 || item.QuantidadeInformada <= 0 || item.SalePrice < 0 {
-				return InvalidInput(fmt.Sprintf("item %d: sequence, quantidade e preço devem ser válidos", index+1))
-			}
-			if _, exists := sequences[item.Sequence]; exists {
-				return InvalidInput(fmt.Sprintf("item %d: sequence duplicada", index+1))
-			}
-			sequences[item.Sequence] = struct{}{}
-			var productCode string
-			productQuery := `SELECT codigo_erp FROM item WHERE COALESCE(ativo,true) AND `
-			var productQueryValue any
-			if item.Product.ID > 0 {
-				productQuery += "codigo=$1"
-				productQueryValue = item.Product.ID
-			} else if item.Product.CodigoERP != "" {
-				productQuery += "codigo_erp=$1"
-				productQueryValue = item.Product.CodigoERP
-			} else {
-				return InvalidInput(fmt.Sprintf("item %d: product.id ou product.codigo_erp é obrigatório", index+1))
-			}
-			if err := tx.QueryRow(ctx, productQuery, productQueryValue).Scan(&productCode); err != nil {
-				return fmt.Errorf("produto não encontrado: %w", err)
-			}
-			if item.Product.CodigoERP != "" && item.Product.CodigoERP != productCode {
-				return InvalidInput("codigo_erp do produto não corresponde ao id")
-			}
-			priceCode, err := resolveERPCode(ctx, tx, "tabela_preco", item.PriceTableID)
-			if err != nil {
-				return fmt.Errorf("tabela de preço não encontrada: %w", err)
-			}
-			total := item.QuantidadeInformada*item.SalePrice - item.ValorDescontoComercial
-			if total < 0 {
-				return InvalidInput(fmt.Sprintf("item %d: desconto excede o valor bruto", index+1))
-			}
-			var dataEntrega any = orderDelivery
-			if item.DataEntrega != nil {
-				data, err := parseDateTime(*item.DataEntrega)
-				if err != nil {
-					return err
-				}
-				dataEntrega = data
-			}
-			_, err = tx.Exec(ctx, `
-				INSERT INTO pedido_item (
-					cod_tenant,cod_empresa,codigo_erp_pedido,codigo_erp_item_pedido,
-					codigo_erp_produto,codigo_erp_tabela_preco,preco_venda_original_sugerido,
-					preco_venda_praticado_digitado,quantidade_informada,
-					valor_desconto_comercial,valor_total_produtos_liquido,data_entrega,observacao_item
-				) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
-				tenantID, empresaID, orderERP, strconv.Itoa(item.Sequence), productCode,
-				priceCode, item.OriginalPrice, item.SalePrice, item.QuantidadeInformada,
-				item.ValorDescontoComercial, total, dataEntrega, item.ObservacaoItem)
-			if err != nil {
-				return fmt.Errorf("salvar item %d: %w", index+1, err)
-			}
+		if err := insertPedidoItems(ctx, tx, tenantID, empresaID, orderERP, input.Itens, orderDelivery); err != nil {
+			return err
 		}
 		result, err = pedidoDetalhe(ctx, tx, orderID)
 		return err
@@ -508,13 +521,177 @@ func (s *Service) CriarPedido(ctx context.Context, tenantID, empresaID int, inpu
 	return result, err
 }
 
+// AtualizarPedido permite edição em qualquer situação, inclusive aprovado.
+// Se o ERP já processou o pedido, a alteração não será propagada.
+// TODO: revisar política de edição após integração com o ERP.
+func (s *Service) AtualizarPedido(ctx context.Context, tenantID, empresaID, id int, input models.PedidoCreate) (map[string]any, error) {
+	statusProvided := input.Status != nil
+	input, emission, orderDelivery, status, err := preparePedido(input, empresaID)
+	if err != nil {
+		return nil, err
+	}
+	var result map[string]any
+	err = s.withSession(ctx, tenantID, empresaID, func(tx pgx.Tx) error {
+		var orderERP, existingStatus string
+		if err := tx.QueryRow(ctx, `SELECT codigo_erp,situacao_app FROM pedido
+			WHERE cod_tenant=$1 AND cod_empresa=$2 AND codigo=$3
+			  AND COALESCE(apagar_dados_pedido,false)=false`,
+			tenantID, empresaID, id).Scan(&orderERP, &existingStatus); err != nil {
+			return err
+		}
+		if !statusProvided {
+			status = existingStatus
+		}
+		customerCode, err := resolveERPCode(ctx, tx, "cliente", input.ClienteID)
+		if err != nil {
+			return fmt.Errorf("%w: %v", ErrInvalidCustomer, err)
+		}
+		conditionCode, err := resolveERPCode(ctx, tx, "condicao_pagamento", input.CondicaoPagamentoID)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return InvalidInput("condição de pagamento inválida")
+			}
+			return fmt.Errorf("condição de pagamento não encontrada: %w", err)
+		}
+		methodCode, err := resolveERPCode(ctx, tx, "forma_pagamento", input.FormaPagamentoID)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return InvalidInput("forma de pagamento inválida")
+			}
+			return fmt.Errorf("forma de pagamento não encontrada: %w", err)
+		}
+		carrierCode, err := resolveERPCode(ctx, tx, "transportadora", input.TransportadoraID)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return InvalidInput("transportadora inválida")
+			}
+			return fmt.Errorf("transportadora não encontrada: %w", err)
+		}
+		addressCodes := make([]*string, 3)
+		for index, addressID := range []*int{
+			input.EnderecoFaturamentoID, input.EnderecoEntregaID, input.EnderecoCobrancaID,
+		} {
+			if addressID == nil {
+				continue
+			}
+			var code string
+			if err := tx.QueryRow(ctx, `SELECT identificacao_endereco FROM cliente_endereco_adicional
+				WHERE cod_tenant=$1 AND cod_empresa=$2 AND codigo=$3
+				  AND codigo_erp_cliente=$4 AND deletado_em IS NULL`,
+				tenantID, empresaID, *addressID, *customerCode).Scan(&code); err != nil {
+				if errors.Is(err, pgx.ErrNoRows) {
+					return InvalidInput("endereço do cliente inválido")
+				}
+				return fmt.Errorf("validar endereço do pedido: %w", err)
+			}
+			addressCodes[index] = &code
+		}
+		_, err = tx.Exec(ctx, `UPDATE pedido SET
+			nro_pedido_cliente=$4,e_um_orcamento=$5,data_emissao=$6,codigo_erp_cliente=$7,
+			cliente_cnpj_cpf=(SELECT cnpj_cpf FROM cliente WHERE codigo=$8),
+			codigo_erp_condicao_pagamento=$9,codigo_erp_forma_pagamento=$10,
+			codigo_erp_transportadora=$11,endereco_ident_faturamento=$12,
+			endereco_ident_entrega=$13,endereco_ident_cobranca=$14,valor_frete=$15,
+			observacoes_pedido=$16,observacoes_nota_fiscal=$17,
+			situacao_app=CASE WHEN $18 THEN $19 ELSE situacao_app END
+			WHERE cod_tenant=$1 AND cod_empresa=$2 AND codigo=$3`,
+			tenantID, empresaID, id, input.NumeroCliente, input.Tipo == "orcamento", emission,
+			customerCode, *input.ClienteID, conditionCode, methodCode, carrierCode,
+			addressCodes[0], addressCodes[1], addressCodes[2], input.ValorFrete,
+			input.ObservacoesPedido, input.ObservacoesNotaFiscal, statusProvided, status)
+		if err != nil {
+			return fmt.Errorf("atualizar pedido: %w", err)
+		}
+		if _, err := tx.Exec(ctx, `DELETE FROM pedido_item
+			WHERE cod_tenant=$1 AND cod_empresa=$2 AND codigo_erp_pedido=$3`,
+			tenantID, empresaID, orderERP); err != nil {
+			return fmt.Errorf("substituir itens do pedido: %w", err)
+		}
+		if err := insertPedidoItems(ctx, tx, tenantID, empresaID, orderERP, input.Itens, orderDelivery); err != nil {
+			return err
+		}
+		result, err = pedidoDetalhe(ctx, tx, id)
+		return err
+	})
+	return result, err
+}
+
+func insertPedidoItems(ctx context.Context, tx pgx.Tx, tenantID, empresaID int, orderERP string, items []models.PedidoItemInput, orderDelivery *time.Time) error {
+	sequences := make(map[int]struct{}, len(items))
+	for index, item := range items {
+		if item.Sequence <= 0 || item.QuantidadeInformada <= 0 ||
+			item.SalePrice < 0 || item.ValorDescontoComercial < 0 {
+			return InvalidInput(fmt.Sprintf("item %d: sequence, quantidade e preço devem ser válidos", index+1))
+		}
+		if _, exists := sequences[item.Sequence]; exists {
+			return InvalidInput(fmt.Sprintf("item %d: sequence duplicada", index+1))
+		}
+		sequences[item.Sequence] = struct{}{}
+		var productCode string
+		productQuery := `SELECT codigo_erp FROM item WHERE COALESCE(ativo,true) AND `
+		var productQueryValue any
+		if item.Product.ID > 0 {
+			productQuery += "codigo=$1"
+			productQueryValue = item.Product.ID
+		} else if item.Product.CodigoERP != "" {
+			productQuery += "codigo_erp=$1"
+			productQueryValue = item.Product.CodigoERP
+		} else {
+			return InvalidInput(fmt.Sprintf("item %d: product.id ou product.codigo_erp é obrigatório", index+1))
+		}
+		if err := tx.QueryRow(ctx, productQuery, productQueryValue).Scan(&productCode); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return InvalidInput(fmt.Sprintf("item %d: produto inválido", index+1))
+			}
+			return fmt.Errorf("produto não encontrado: %w", err)
+		}
+		if item.Product.CodigoERP != "" && item.Product.CodigoERP != productCode {
+			return InvalidInput("codigo_erp do produto não corresponde ao id")
+		}
+		priceCode, err := resolveERPCode(ctx, tx, "tabela_preco", item.PriceTableID)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return InvalidInput(fmt.Sprintf("item %d: tabela de preço inválida", index+1))
+			}
+			return fmt.Errorf("tabela de preço não encontrada: %w", err)
+		}
+		total := item.QuantidadeInformada*item.SalePrice - item.ValorDescontoComercial
+		if total < 0 {
+			return InvalidInput(fmt.Sprintf("item %d: desconto excede o valor bruto", index+1))
+		}
+		var dataEntrega any = orderDelivery
+		if item.DataEntrega != nil {
+			data, err := parseDateTime(*item.DataEntrega)
+			if err != nil {
+				return err
+			}
+			dataEntrega = data
+		}
+		_, err = tx.Exec(ctx, `
+			INSERT INTO pedido_item (
+				cod_tenant,cod_empresa,codigo_erp_pedido,codigo_erp_item_pedido,
+				codigo_erp_produto,codigo_erp_tabela_preco,preco_venda_original_sugerido,
+				preco_venda_praticado_digitado,quantidade_informada,
+				valor_desconto_comercial,valor_total_produtos_liquido,data_entrega,observacao_item
+			) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+			tenantID, empresaID, orderERP, strconv.Itoa(item.Sequence), productCode,
+			priceCode, item.OriginalPrice, item.SalePrice, item.QuantidadeInformada,
+			item.ValorDescontoComercial, total, dataEntrega, item.ObservacaoItem)
+		if err != nil {
+			return fmt.Errorf("salvar item %d: %w", index+1, err)
+		}
+	}
+	return nil
+}
+
 func (s *Service) RemoverPedido(ctx context.Context, tenantID, empresaID, id int) error {
 	return s.withSession(ctx, tenantID, empresaID, func(tx pgx.Tx) error {
-		tag, err := tx.Exec(ctx, `UPDATE pedido SET apagar_dados_pedido=true
+		tag, err := tx.Exec(ctx, `UPDATE pedido SET situacao_app='cancelado'
 			WHERE cod_tenant=$1 AND cod_empresa=$2 AND codigo=$3
-			  AND COALESCE(apagar_dados_pedido,false)=false`, tenantID, empresaID, id)
+			  AND COALESCE(apagar_dados_pedido,false)=false
+			  AND situacao_app <> 'cancelado'`, tenantID, empresaID, id)
 		if err != nil {
-			return fmt.Errorf("marcar pedido para remoção: %w", err)
+			return fmt.Errorf("cancelar pedido: %w", err)
 		}
 		if tag.RowsAffected() == 0 {
 			return pgx.ErrNoRows

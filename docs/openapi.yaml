@@ -438,9 +438,7 @@ paths:
     put:
       tags: [clientes]
       summary: Atualizar cliente
-      description: |
-        # TODO: o front hoje envia payload misto (camelCase + snake_case);
-        este contrato define o payload limpo em snake_case.
+      description: Atualiza os campos do cliente sem alterar `codigo_erp`.
       requestBody:
         required: true
         content:
@@ -464,8 +462,7 @@ paths:
     delete:
       tags: [clientes]
       summary: Remover cliente
-      description: |
-        # TODO: definir se é soft delete (`ativo = false`) ou hard delete.
+      description: Soft delete; o registro recebe `deletado_em` e deixa de aparecer nas consultas.
       responses:
         '200':
           description: Cliente removido
@@ -593,6 +590,7 @@ paths:
     delete:
       tags: [clientes]
       summary: Remover endereço
+      description: Soft delete do endereço vinculado ao cliente.
       responses:
         '200':
           description: Endereço removido
@@ -692,6 +690,12 @@ paths:
           in: query
           schema:
             type: integer
+        - name: incluir_cancelados
+          in: query
+          description: Inclui pedidos cancelados na listagem, ocultos por padrão.
+          schema:
+            type: boolean
+            default: false
         - $ref: '#/components/parameters/LimitParam'
         - $ref: '#/components/parameters/CursorParam'
       responses:
@@ -725,9 +729,8 @@ paths:
 
     post:
       tags: [pedidos]
-      summary: Criar ou atualizar pedido
-      description: |
-        # TODO: o front reusa POST para update; avaliar se passa a usar PUT/PATCH.
+      summary: Criar pedido
+      description: Cria o pedido e seus itens de forma atômica. `data_emissao` é opcional e, quando omitida, usa a data atual em UTC.
       requestBody:
         required: true
         content:
@@ -736,7 +739,7 @@ paths:
               $ref: '#/components/schemas/PedidoCreate'
       responses:
         '201':
-          description: Pedido criado/atualizado
+          description: Pedido criado
           content:
             application/json:
               schema:
@@ -810,12 +813,40 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
-    delete:
+    put:
       tags: [pedidos]
-      summary: Remover pedido
+      summary: Atualizar pedido
+      description: |
+        Substitui os itens do pedido dentro de uma transação. A edição é permitida
+        em qualquer situação, inclusive aprovado; se o ERP já processou o pedido,
+        a alteração não será propagada.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PedidoCreate'
       responses:
         '200':
-          description: Pedido removido
+          description: Pedido atualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PedidoDetalheEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags: [pedidos]
+      summary: Cancelar pedido
+      description: Define `situacao_app=cancelado`; o pedido não é excluído fisicamente e fica oculto da listagem padrão.
+      responses:
+        '200':
+          description: Pedido cancelado
           content:
             application/json:
               schema:
@@ -1078,6 +1109,22 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+    delete:
+      tags: [agenda]
+      summary: Remover compromisso
+      description: Soft delete; o compromisso deixa de aparecer nas consultas.
+      responses:
+        '200':
+          description: Compromisso removido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   /agenda/{id}/concluir:
     parameters:
       - $ref: '#/components/parameters/IdPathParam'
@@ -1184,6 +1231,22 @@ paths:
                 $ref: '#/components/schemas/TarefaEnvelope'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags: [tarefa]
+      summary: Remover tarefa
+      description: Soft delete; a tarefa deixa de aparecer nas consultas.
+      responses:
+        '200':
+          description: Tarefa removida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -1940,7 +2003,7 @@ components:
 
     PedidoCreate:
       type: object
-      required: [tipo, data_emissao]
+      required: [tipo, cliente_id, itens]
       properties:
         tipo:
           $ref: '#/components/schemas/PedidoTipo'
@@ -1950,6 +2013,7 @@ components:
         data_emissao:
           type: string
           format: date-time
+          description: Opcional; assume a data atual em UTC quando omitida.
         data_entrega:
           type:
             - string
@@ -1964,12 +2028,43 @@ components:
         endereco_entrega_id: { type: integer }
         endereco_cobranca_id: { type: integer }
         valor_frete: { type: number }
+        observacoes:
+          type: string
+          description: Alias de `observacoes_pedido`.
         observacoes_pedido: { type: string }
         observacoes_nota_fiscal: { type: string }
         itens:
           type: array
           items:
-            $ref: '#/components/schemas/ItemPedido'
+            $ref: '#/components/schemas/PedidoItemCreate'
+
+    PedidoItemCreate:
+      type: object
+      description: Aceita o formato plano ou a estrutura legada `product`.
+      anyOf:
+        - required: [produto_id, quantidade, preco_venda]
+        - required: [product, quantidade_informada, sale_price]
+      properties:
+        produto_id: { type: integer, minimum: 1 }
+        quantidade: { type: number, exclusiveMinimum: 0 }
+        preco_venda: { type: number, minimum: 0 }
+        valor_desconto: { type: number, minimum: 0, default: 0 }
+        sequence: { type: integer, minimum: 0 }
+        product:
+          $ref: '#/components/schemas/ProdutoPedido'
+        quantidade_informada: { type: number }
+        sale_price: { type: number }
+        original_price: { type: number }
+        valor_desconto_comercial: { type: number }
+        data_entrega:
+          type:
+            - string
+            - 'null'
+          format: date-time
+        observacao_item:
+          type:
+            - string
+            - 'null'
 
     Pedido:
       type: object

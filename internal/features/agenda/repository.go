@@ -27,7 +27,7 @@ func (r *Repository) List(ctx context.Context, tx pgx.Tx, tenantID, empresaID, u
 		       codigo_erp_cliente
 		FROM agenda
 		WHERE cod_tenant=$1 AND cod_empresa=$2 AND cod_usuario=$3 AND codigo>$4
-		  AND ($5::boolean IS NULL OR concluida=$5)
+		  AND deletado_em IS NULL AND ($5::boolean IS NULL OR concluida=$5)
 		ORDER BY codigo LIMIT $6`, tenantID, empresaID, userID, cursor, completed, limit+1)
 	if err != nil {
 		return nil, fmt.Errorf("listar agenda: %w", err)
@@ -44,7 +44,7 @@ func (r *Repository) Get(ctx context.Context, tx pgx.Tx, tenantID, empresaID, us
 		       to_char(dt_inclusao AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS"Z"') AS dt_inclusao,
 		       to_char(dt_alteracao AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS"Z"') AS dt_alteracao
 		FROM agenda
-		WHERE cod_tenant=$1 AND cod_empresa=$2 AND codigo=$3 AND cod_usuario=$4`,
+		WHERE cod_tenant=$1 AND cod_empresa=$2 AND codigo=$3 AND cod_usuario=$4 AND deletado_em IS NULL`,
 		tenantID, empresaID, id, userID)
 	if err != nil {
 		return nil, fmt.Errorf("consultar compromisso: %w", err)
@@ -90,7 +90,7 @@ func (r *Repository) Create(ctx context.Context, tx pgx.Tx, tenantID, empresaID,
 func (r *Repository) Update(ctx context.Context, tx pgx.Tx, tenantID, empresaID, userID, id int, input models.AgendaCreate, scheduled time.Time) (map[string]any, error) {
 	tag, err := tx.Exec(ctx, `
 		UPDATE agenda SET titulo=$5,descricao=$6,data_agendada=$7,hora_agendada=$8,codigo_erp_cliente=$9
-		WHERE cod_tenant=$1 AND cod_empresa=$2 AND codigo=$3 AND cod_usuario=$4`,
+		WHERE cod_tenant=$1 AND cod_empresa=$2 AND codigo=$3 AND cod_usuario=$4 AND deletado_em IS NULL`,
 		tenantID, empresaID, id, userID, input.Titulo, input.Descricao, scheduled, input.HoraAgendada, input.CodigoERPCliente)
 	if err != nil {
 		return nil, fmt.Errorf("atualizar compromisso: %w", err)
@@ -103,7 +103,7 @@ func (r *Repository) Update(ctx context.Context, tx pgx.Tx, tenantID, empresaID,
 
 func (r *Repository) Complete(ctx context.Context, tx pgx.Tx, tenantID, empresaID, userID, id int) (map[string]any, error) {
 	tag, err := tx.Exec(ctx, `UPDATE agenda SET concluida=true
-		WHERE cod_tenant=$1 AND cod_empresa=$2 AND codigo=$3 AND cod_usuario=$4`, tenantID, empresaID, id, userID)
+		WHERE cod_tenant=$1 AND cod_empresa=$2 AND codigo=$3 AND cod_usuario=$4 AND deletado_em IS NULL`, tenantID, empresaID, id, userID)
 	if err != nil {
 		return nil, fmt.Errorf("concluir compromisso: %w", err)
 	}
@@ -111,4 +111,17 @@ func (r *Repository) Complete(ctx context.Context, tx pgx.Tx, tenantID, empresaI
 		return nil, pgx.ErrNoRows
 	}
 	return r.Get(ctx, tx, tenantID, empresaID, userID, id)
+}
+
+func (r *Repository) Delete(ctx context.Context, tx pgx.Tx, tenantID, empresaID, userID, id int) error {
+	tag, err := tx.Exec(ctx, `UPDATE agenda SET deletado_em=now()
+		WHERE cod_tenant=$1 AND cod_empresa=$2 AND codigo=$3 AND cod_usuario=$4 AND deletado_em IS NULL`,
+		tenantID, empresaID, id, userID)
+	if err != nil {
+		return fmt.Errorf("remover compromisso: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return pgx.ErrNoRows
+	}
+	return nil
 }

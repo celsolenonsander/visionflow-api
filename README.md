@@ -4,15 +4,15 @@ API Go para o sistema **VisionFlow** — plataforma SaaS multi-tenant para
 força de vendas, com suporte a **white label** e integração com ERP.
 
 **Estado atual:**
-- As 40 operações do OpenAPI têm rotas e handlers registrados; as pendências de
-  regra/semântica estão listadas em “Limitações e validação” e no relatório.
+- Endpoints de leitura e escrita descritos abaixo estão implementados; pedidos
+  e orçamentos ainda usam o service compartilhado.
 - CEP e CNPJ usam serviços externos (ViaCEP e BrasilAPI).
 - Auth, catálogo, clientes, agenda, tarefas, Home, shell e notificações já têm
   módulos em `internal/features`; pedidos/orçamentos ainda estão no service
   compartilhado.
-- `go test ./...`, `go build ./...` e `go vet ./...` passaram em 2026-10-15.
-  Testes de integração com PostgreSQL ainda não foram executados; a migration
-  V011 (`pgcrypto`) está pendente no banco de desenvolvimento. O inventário por
+- `go test ./...` e `go build ./...` passaram após as operações de escrita.
+  A V013 de soft delete está aplicada no banco de desenvolvimento; consulte
+  Flyway `info` antes de migrar outro ambiente. O inventário por
   operação está em [`docs/api-operation-inventory.md`](docs/api-operation-inventory.md).
 
 ---
@@ -28,6 +28,7 @@ força de vendas, com suporte a **white label** e integração com ERP.
 - [Autenticação](#autenticação)
 - [Banco de dados](#banco-de-dados)
   - [Estrutura](#estrutura)
+  - [Migrations](#migrations)
   - [Flyway](#flyway)
   - [RLS (multi-tenant)](#rls-multi-tenant)
   - [Backup](#backup)
@@ -97,7 +98,7 @@ visionflow-api/
 ├── db/
 │   ├── flyway.conf.example         # Template de config do Flyway
 │   ├── README.md                   # Detalhes de banco
-│   ├── migrations/                 # Migrations versionadas (V001 → V011)
+│   ├── migrations/                 # Migrations versionadas (V001 → V013)
 │   │   ├── V001__nucleo_saas.sql
 │   │   ├── V002__cadastros_base.sql
 │   │   ├── V003__cadastros_operacionais.sql
@@ -108,7 +109,9 @@ visionflow-api/
 │   │   ├── V008__notificacao.sql
 │   │   ├── V009__agenda_tarefa.sql
 │   │   ├── V010__empresa_regional.sql
-│   │   └── V011__pgcrypto_password_validation.sql
+│   │   ├── V011__pgcrypto_password_validation.sql
+│   │   ├── V012__fix_admin_password_hash.sql
+│   │   └── V013__soft_delete.sql
 │   ├── seeds/
 │   │   └── demo_comercial/         # Dados de demonstração
 │   └── scripts/                    # Automação
@@ -240,14 +243,13 @@ Serviços disponíveis:
 - `DELETE /clientes/{id}/enderecos/{enderecoId}`
 - `GET  /clientes/{id}/contas-receber`
 - `GET  /cep/{cep}`
-- `GET/POST /pedidos`
+- `GET/POST /pedidos`, `PUT/DELETE /pedidos/{id}`
 - `GET  /pedidos/{id}`
-- `DELETE /pedidos/{id}`
 - `GET  /orcamentos`, `/orcamentos/{id}`
 - `GET  /empresas`, `/condicoes-pagamento`, `/formas-pagamento`
 - `GET  /transportadoras`, `/tabelas-preco`, `/produtos`
-- `GET/POST /agenda`, `GET/PUT /agenda/{id}`, `PATCH /agenda/{id}/concluir`
-- `GET/POST /tarefas`, `GET/PUT /tarefas/{id}`, `PATCH /tarefas/{id}/concluir`
+- `GET/POST /agenda`, `GET/PUT/DELETE /agenda/{id}`, `PATCH /agenda/{id}/concluir`
+- `GET/POST /tarefas`, `GET/PUT/DELETE /tarefas/{id}`, `PATCH /tarefas/{id}/concluir`
 - `GET  /notificacoes`
 - `GET  /notificacoes/nao-lidas/count`
 
@@ -257,9 +259,44 @@ Serviços disponíveis:
 - `GET /shell/notificacoes`
 
 As rotas de negócio usam PostgreSQL com escopo de tenant/empresa via RLS.
-O login valida o hash com `pgcrypto`; aplique `V011__pgcrypto_password_validation.sql`
-antes de usar a autenticação. O Swagger UI serve uma cópia embutida de
-`docs/openapi.yaml`.
+Clientes, endereços, agenda e tarefas usam soft delete com `deletado_em`.
+Pedidos são cancelados com `situacao_app=cancelado` e ficam ocultos por padrão;
+`GET /pedidos?incluir_cancelados=true` também os inclui. O Swagger UI serve uma
+cópia embutida de `docs/openapi.yaml`.
+
+### Exemplos de escrita
+
+Após obter o JWT em `TOKEN` com `POST /auth/login`:
+
+```bash
+# Criar cliente
+curl -i -X POST http://localhost:8080/clientes \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"nome_razao_social":"Mercadinho Teste LTDA","tipo_pessoa":"PJ"}'
+
+# Atualizar cliente
+curl -i -X PUT http://localhost:8080/clientes/1 \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"nome_razao_social":"Mercadinho Teste (editado)","tipo_pessoa":"PJ"}'
+
+# Criar pedido com item
+curl -i -X POST http://localhost:8080/pedidos \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"tipo":"pedido","cliente_id":1,"itens":[{"produto_id":1,"quantidade":2,"preco_venda":8.5,"valor_desconto":0}]}'
+
+# Atualizar e cancelar pedido
+curl -i -X PUT http://localhost:8080/pedidos/1 \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"tipo":"pedido","cliente_id":1,"itens":[{"produto_id":1,"quantidade":2,"preco_venda":8.5,"valor_desconto":0}]}'
+curl -i -X DELETE http://localhost:8080/pedidos/1 \
+  -H "Authorization: Bearer $TOKEN"
+
+# Excluir logicamente compromisso ou tarefa
+curl -i -X DELETE http://localhost:8080/agenda/1 \
+  -H "Authorization: Bearer $TOKEN"
+curl -i -X DELETE http://localhost:8080/tarefas/1 \
+  -H "Authorization: Bearer $TOKEN"
+```
 
 ### Testes e compilação
 
@@ -304,8 +341,8 @@ Authorization: Bearer <token>
 
 O schema versionado segue o padrão multi-tenant e inclui tabelas operacionais,
 notificações, agenda e tarefas. Consulte `docs/schema.sql` e as migrations para
-a definição completa; a instalação observada no desenvolvimento estava no
-baseline 5 + V006–V010, com V011 pendente.
+a definição completa; a instalação validada no desenvolvimento usa as
+migrations V001–V013.
 
 | Grupo | Quantidade | Exemplos |
 |-------|-----------|----------|
@@ -321,11 +358,17 @@ baseline 5 + V006–V010, com V011 pendente.
 - Auditoria: `dt_inclusao`, `dt_alteracao`
 - Status: `ativo BOOLEAN DEFAULT TRUE` (`NULL` = usa padrão)
 
+### Migrations
+
+O repositório contém migrations versionadas de V001 a V013. A V013 adiciona
+`deletado_em` em `cliente`, `cliente_endereco_adicional`, `agenda` e `tarefa`,
+com índices parciais para registros não removidos. No banco de desenvolvimento
+validado, V013 está aplicada.
+
 ### Flyway
 
-O projeto usa **Flyway** para versionar o schema. O repositório contém migrations
-V001–V011. O histórico do banco de desenvolvimento verificado em 2026-10-15
-estava no baseline 5 + V006–V010; confirme `info` antes de migrar outro ambiente.
+O projeto usa **Flyway** para versionar o schema. Consulte o status do ambiente
+antes de aplicar qualquer migration.
 
 **Comandos principais:**
 
@@ -455,3 +498,26 @@ superuser; use um papel de aplicação com privilégios restritos antes de
 considerar o isolamento multi-tenant validado.
 
 
+git config pull.rebase true
+
+# 1. Vê o que vai commitar
+git status --short
+
+# 2. Commita tudo (incluindo a V013 untracked)
+git add -A
+git commit -m "feat(api): implementa endpoints de escrita (POST/PUT/DELETE)
+
+- V013: soft delete com deletado_em
+- POST/PUT/DELETE /clientes (soft delete)
+- POST/DELETE /clientes/{id}/enderecos (soft delete)
+- POST/PUT /pedidos (transação atômica)
+- DELETE /pedidos/{id} -> situacao_app='cancelado'
+- DELETE /agenda/{id} e /tarefas/{id} (soft delete)
+- Catálogos + README + OpenAPI atualizados"
+
+# 3. Agora sim, rebase
+git pull origin main
+
+# 4. Se deu conflito: resolve + git add + git rebase --continue
+# 5. Se não: push
+git push

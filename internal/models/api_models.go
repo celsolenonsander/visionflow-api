@@ -69,6 +69,7 @@ type PedidoCreate struct {
 	EnderecoEntregaID     *int              `json:"endereco_entrega_id"`
 	EnderecoCobrancaID    *int              `json:"endereco_cobranca_id"`
 	ValorFrete            float64           `json:"valor_frete"`
+	Observacoes           string            `json:"observacoes"`
 	ObservacoesPedido     *string           `json:"observacoes_pedido"`
 	ObservacoesNotaFiscal *string           `json:"observacoes_nota_fiscal"`
 	Itens                 []PedidoItemInput `json:"itens"`
@@ -88,6 +89,10 @@ type PedidoItemInput struct {
 	ValorTotalProdutosLiquido *float64     `json:"valor_total_produtos_liquido"`
 	DataEntrega               *string      `json:"data_entrega"`
 	ObservacaoItem            *string      `json:"observacao_item"`
+	ProdutoID                 int          `json:"produto_id"`
+	Quantidade                float64      `json:"quantidade"`
+	PrecoVenda                float64      `json:"preco_venda"`
+	ValorDesconto             float64      `json:"valor_desconto"`
 }
 
 type ProdutoInput struct {

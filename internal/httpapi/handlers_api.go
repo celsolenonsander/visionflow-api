@@ -92,7 +92,7 @@ func (h *Handler) RemoverCliente(w http.ResponseWriter, r *http.Request) {
 		writeServiceError(w, err, "Não foi possível remover o cliente.")
 		return
 	}
-	writeJSON(w, http.StatusOK, nil, nil)
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true}, nil)
 }
 
 func (h *Handler) EnderecosCliente(w http.ResponseWriter, r *http.Request) {
@@ -164,7 +164,7 @@ func (h *Handler) RemoverEndereco(w http.ResponseWriter, r *http.Request) {
 		writeServiceError(w, err, "Não foi possível remover o endereço.")
 		return
 	}
-	writeJSON(w, http.StatusOK, nil, nil)
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true}, nil)
 }
 
 func (h *Handler) ContasReceberCliente(w http.ResponseWriter, r *http.Request) {
@@ -263,7 +263,15 @@ func (h *Handler) listarPedidos(w http.ResponseWriter, r *http.Request, orcament
 		}
 		clienteID = &parsed
 	}
-	items, next, err := h.Service.PedidosListarAPI(r.Context(), tenantID, empresaID, status, clienteID, limit, cursor, orcamento)
+	includeCanceled, err := boolQuery(r, "incluir_cancelados")
+	if err != nil {
+		bad(w, http.StatusBadRequest, "REQUISICAO_INVALIDA", err.Error())
+		return
+	}
+	items, next, err := h.Service.PedidosListarAPI(
+		r.Context(), tenantID, empresaID, status, clienteID, limit, cursor, orcamento,
+		includeCanceled != nil && *includeCanceled,
+	)
 	if err != nil {
 		writeServiceError(w, err, "Não foi possível listar os pedidos.")
 		return
@@ -312,16 +320,59 @@ func (h *Handler) SalvarPedidoAPI(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &input) {
 		return
 	}
-	if input.Tipo == "" || input.DataEmissao == "" {
-		bad(w, http.StatusBadRequest, "REQUISICAO_INVALIDA", "tipo e data_emissao são obrigatórios.")
+	if len(input.Itens) == 0 {
+		bad(w, http.StatusBadRequest, "ITENS_OBRIGATORIOS", "O pedido deve conter ao menos um item.")
+		return
+	}
+	if input.ClienteID == nil || *input.ClienteID <= 0 {
+		bad(w, http.StatusBadRequest, "CLIENTE_INVALIDO", "cliente_id é obrigatório e deve ser válido.")
 		return
 	}
 	result, err := h.Service.CriarPedido(r.Context(), tenantID, empresaID, input)
 	if err != nil {
+		if errors.Is(err, service.ErrInvalidCustomer) {
+			bad(w, http.StatusBadRequest, "CLIENTE_INVALIDO", "O cliente informado não existe ou foi removido.")
+			return
+		}
 		writeServiceError(w, err, "Não foi possível salvar o pedido.")
 		return
 	}
 	writeJSON(w, http.StatusCreated, result, nil)
+}
+
+func (h *Handler) AtualizarPedidoAPI(w http.ResponseWriter, r *http.Request) {
+	tenantID, empresaID, _, ok := authenticatedIDs(r)
+	if !ok {
+		bad(w, http.StatusUnauthorized, "NAO_AUTENTICADO", "Contexto de autenticação inválido.")
+		return
+	}
+	id, err := requestID(chi.URLParam(r, "id"))
+	if err != nil {
+		bad(w, http.StatusBadRequest, "REQUISICAO_INVALIDA", "ID do pedido inválido.")
+		return
+	}
+	var input models.PedidoCreate
+	if !decode(w, r, &input) {
+		return
+	}
+	if len(input.Itens) == 0 {
+		bad(w, http.StatusBadRequest, "ITENS_OBRIGATORIOS", "O pedido deve conter ao menos um item.")
+		return
+	}
+	if input.ClienteID == nil || *input.ClienteID <= 0 {
+		bad(w, http.StatusBadRequest, "CLIENTE_INVALIDO", "cliente_id é obrigatório e deve ser válido.")
+		return
+	}
+	result, err := h.Service.AtualizarPedido(r.Context(), tenantID, empresaID, id, input)
+	if err != nil {
+		if errors.Is(err, service.ErrInvalidCustomer) {
+			bad(w, http.StatusBadRequest, "CLIENTE_INVALIDO", "O cliente informado não existe ou foi removido.")
+			return
+		}
+		writeServiceError(w, err, "Não foi possível atualizar o pedido.")
+		return
+	}
+	writeJSON(w, http.StatusOK, result, nil)
 }
 
 func (h *Handler) RemoverPedido(w http.ResponseWriter, r *http.Request) {
@@ -339,7 +390,7 @@ func (h *Handler) RemoverPedido(w http.ResponseWriter, r *http.Request) {
 		writeServiceError(w, err, "Não foi possível remover o pedido.")
 		return
 	}
-	writeJSON(w, http.StatusOK, nil, nil)
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true}, nil)
 }
 
 func validPedidoStatus(status string) bool {
@@ -492,6 +543,10 @@ func (h *Handler) AgendaConcluir(w http.ResponseWriter, r *http.Request) {
 	h.concluirPessoal(w, r, "agenda")
 }
 
+func (h *Handler) AgendaRemover(w http.ResponseWriter, r *http.Request) {
+	h.removerPessoal(w, r, "agenda")
+}
+
 func (h *Handler) TarefasListarAPI(w http.ResponseWriter, r *http.Request) {
 	tenantID, empresaID, userID, ok := authenticatedIDs(r)
 	if !ok {
@@ -578,6 +633,10 @@ func (h *Handler) TarefaConcluir(w http.ResponseWriter, r *http.Request) {
 	h.concluirPessoal(w, r, "tarefa")
 }
 
+func (h *Handler) TarefaRemover(w http.ResponseWriter, r *http.Request) {
+	h.removerPessoal(w, r, "tarefa")
+}
+
 func (h *Handler) pessoalResource(w http.ResponseWriter, r *http.Request, resource string) {
 	tenantID, empresaID, userID, ok := authenticatedIDs(r)
 	if !ok {
@@ -627,6 +686,32 @@ func (h *Handler) concluirPessoal(w http.ResponseWriter, r *http.Request, resour
 		return
 	}
 	writeJSON(w, http.StatusOK, result, nil)
+}
+
+func (h *Handler) removerPessoal(w http.ResponseWriter, r *http.Request, resource string) {
+	tenantID, empresaID, userID, ok := authenticatedIDs(r)
+	if !ok {
+		bad(w, http.StatusUnauthorized, "NAO_AUTENTICADO", "Contexto de autenticação inválido.")
+		return
+	}
+	id, err := requestID(chi.URLParam(r, "id"))
+	if err != nil {
+		bad(w, http.StatusBadRequest, "REQUISICAO_INVALIDA", "ID inválido.")
+		return
+	}
+	switch resource {
+	case "agenda":
+		err = h.Service.RemoverAgenda(r.Context(), tenantID, empresaID, userID, id)
+	case "tarefa":
+		err = h.Service.RemoverTarefa(r.Context(), tenantID, empresaID, userID, id)
+	default:
+		err = errors.New("recurso inválido")
+	}
+	if err != nil {
+		writeServiceError(w, err, "Não foi possível remover o recurso.")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true}, nil)
 }
 
 func boolQuery(r *http.Request, name string) (*bool, error) {

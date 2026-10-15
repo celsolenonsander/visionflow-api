@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 
 	"github.com/celsolenonsander/visionflow-api/internal/db"
 	"github.com/celsolenonsander/visionflow-api/internal/features/agenda"
@@ -19,6 +20,7 @@ import (
 var ErrInvalidCredentials = auth.ErrInvalidCredentials
 var ErrInvalidInput = apperrors.ErrInvalidInput
 var ErrDuplicateResource = apperrors.ErrDuplicateResource
+var ErrInvalidCustomer = errors.New("cliente inválido")
 
 func InvalidInput(message string) error {
 	return apperrors.InvalidInput(message)
@@ -132,6 +134,10 @@ func (s *Service) ConcluirAgenda(ctx context.Context, tenantID, empresaID, userI
 	return s.agenda.Complete(ctx, tenantID, empresaID, userID, id)
 }
 
+func (s *Service) RemoverAgenda(ctx context.Context, tenantID, empresaID, userID, id int) error {
+	return s.agenda.Delete(ctx, tenantID, empresaID, userID, id)
+}
+
 func (s *Service) TarefasListar(ctx context.Context, tenantID, empresaID, userID, limit, cursor int, concluida *bool, prioridade string) ([]map[string]any, string, error) {
 	return s.tarefa.List(ctx, tenantID, empresaID, userID, limit, cursor, concluida, prioridade)
 }
@@ -150,6 +156,10 @@ func (s *Service) AtualizarTarefa(ctx context.Context, tenantID, empresaID, user
 
 func (s *Service) ConcluirTarefa(ctx context.Context, tenantID, empresaID, userID, id int) (map[string]any, error) {
 	return s.tarefa.Complete(ctx, tenantID, empresaID, userID, id)
+}
+
+func (s *Service) RemoverTarefa(ctx context.Context, tenantID, empresaID, userID, id int) error {
+	return s.tarefa.Delete(ctx, tenantID, empresaID, userID, id)
 }
 
 func (s *Service) IndicadoresAPI(ctx context.Context, tenantID, empresaID, userID int) (map[string]any, error) {

@@ -16,8 +16,11 @@ func TestClienteValidation(t *testing.T) {
 		wantErr bool
 	}{
 		{name: "valid PJ", input: models.ClienteCreate{NomeRazaoSocial: "Empresa", TipoPessoa: "PJ"}},
+		{name: "valid formatted CNPJ", input: models.ClienteCreate{NomeRazaoSocial: "Empresa", TipoPessoa: "PJ", CNPJCPF: "11.111.111/1111-11", EmailContatoComprador: "compras@example.com"}},
 		{name: "missing name", input: models.ClienteCreate{TipoPessoa: "PJ"}, wantErr: true},
 		{name: "invalid person type", input: models.ClienteCreate{NomeRazaoSocial: "Empresa", TipoPessoa: "X"}, wantErr: true},
+		{name: "invalid document length", input: models.ClienteCreate{NomeRazaoSocial: "Empresa", TipoPessoa: "PJ", CNPJCPF: "123"}, wantErr: true},
+		{name: "invalid email", input: models.ClienteCreate{NomeRazaoSocial: "Empresa", TipoPessoa: "PJ", EmailContatoComprador: "invalid"}, wantErr: true},
 		{name: "field exceeds database length", input: models.ClienteCreate{NomeRazaoSocial: strings.Repeat("x", 101), TipoPessoa: "PJ"}, wantErr: true},
 	}
 
@@ -49,7 +52,7 @@ func TestDatabaseAddressTypeMapping(t *testing.T) {
 	for _, test := range []struct {
 		input string
 		want  string
-	}{{"cobranca", "C"}, {"entrega", "E"}, {"ambos", "A"}} {
+	}{{"C", "C"}, {"E", "E"}, {"A", "A"}, {"cobranca", "C"}, {"entrega", "E"}, {"ambos", "A"}} {
 		got, err := bancoTipoEndereco(test.input)
 		if err != nil || got != test.want {
 			t.Errorf("bancoTipoEndereco(%q) = %q, %v, want %q", test.input, got, err, test.want)

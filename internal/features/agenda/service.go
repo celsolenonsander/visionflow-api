@@ -90,6 +90,12 @@ func (s *Service) Complete(ctx context.Context, tenantID, empresaID, userID, id 
 	return result, err
 }
 
+func (s *Service) Delete(ctx context.Context, tenantID, empresaID, userID, id int) error {
+	return s.withSession(ctx, tenantID, empresaID, func(tx pgx.Tx) error {
+		return s.repository.Delete(ctx, tx, tenantID, empresaID, userID, id)
+	})
+}
+
 func (s *Service) withSession(ctx context.Context, tenantID, empresaID int, fn func(pgx.Tx) error) error {
 	session, err := db.NewSession(ctx, s.pool, tenantID, empresaID)
 	if err != nil {

@@ -69,6 +69,7 @@ func (h *Handler) Routes() http.Handler {
 		r.Get("/pedidos", h.PedidosAPI)
 		r.Get("/pedidos/{id}", h.PedidoAPI)
 		r.Post("/pedidos", h.SalvarPedidoAPI)
+		r.Put("/pedidos/{id}", h.AtualizarPedidoAPI)
 		r.Delete("/pedidos/{id}", h.RemoverPedido)
 
 		// Orçamentos
@@ -89,11 +90,13 @@ func (h *Handler) Routes() http.Handler {
 		r.Get("/agenda/{id}", h.AgendaObter)
 		r.Put("/agenda/{id}", h.AgendaAtualizar)
 		r.Patch("/agenda/{id}/concluir", h.AgendaConcluir)
+		r.Delete("/agenda/{id}", h.AgendaRemover)
 		r.Get("/tarefas", h.TarefasListarAPI)
 		r.Post("/tarefas", h.TarefaCriar)
 		r.Get("/tarefas/{id}", h.TarefaObter)
 		r.Put("/tarefas/{id}", h.TarefaAtualizar)
 		r.Patch("/tarefas/{id}/concluir", h.TarefaConcluir)
+		r.Delete("/tarefas/{id}", h.TarefaRemover)
 	})
 
 	return r
