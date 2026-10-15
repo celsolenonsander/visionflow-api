@@ -133,6 +133,9 @@ func pedidoDetalhe(ctx context.Context, tx pgx.Tx, id int) (map[string]any, erro
 		         WHEN '11' THEN 'Orçamento Revisado' WHEN '12' THEN 'Orçamento Aprovado' ELSE NULL END AS status_erp_label,
 		       CASE WHEN p.data_emissao IS NULL THEN NULL ELSE
 		         to_char(p.data_emissao::timestamp AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS"Z"') END AS data_emissao,
+		       CASE WHEN p.data_entrega IS NULL THEN NULL ELSE
+		         to_char(p.data_entrega::timestamp AT TIME ZONE 'UTC',
+		           'YYYY-MM-DD"T"HH24:MI:SS"Z"') END AS data_entrega,
 		       c.codigo AS cliente_id,c.nome_razao_social AS cliente_nome,c.cnpj_cpf AS cliente_cnpj_cpf,
 		       p.valor_frete,p.observacoes_pedido,p.observacoes_nota_fiscal,
 		       e.cod_empresa AS empresa_id,
@@ -231,8 +234,9 @@ func pedidoItens(ctx context.Context, tx pgx.Tx, codigoErpPedido string) ([]map[
 		       pi.quantidade_informada::double precision AS quantidade_informada,
 		       pi.valor_desconto_comercial::double precision AS valor_desconto_comercial,
 		       pi.valor_total_produtos_liquido,
-		       CASE WHEN pi.data_entrega IS NULL THEN NULL ELSE
-		         to_char(pi.data_entrega::timestamp AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS"Z"') END AS data_entrega,
+		       CASE WHEN COALESCE(pi.data_entrega,p.data_entrega) IS NULL THEN NULL ELSE
+		         to_char(COALESCE(pi.data_entrega,p.data_entrega)::timestamp AT TIME ZONE 'UTC',
+		           'YYYY-MM-DD"T"HH24:MI:SS"Z"') END AS data_entrega,
 		       pi.observacao_item,
 		       tp.codigo AS price_table_id,tp.descricao AS price_table_name,
 		       CASE WHEN validity.validade_inicial IS NULL THEN NULL ELSE
@@ -497,15 +501,15 @@ func (s *Service) CriarPedido(ctx context.Context, tenantID, empresaID int, inpu
 		_, err = tx.Exec(ctx, `
 			INSERT INTO pedido (
 				cod_tenant,cod_empresa,codigo,codigo_erp,nosso_codigo_pedido,nro_pedido_cliente,
-				e_um_orcamento,data_emissao,codigo_erp_cliente,cliente_cnpj_cpf,
+				e_um_orcamento,data_emissao,data_entrega,codigo_erp_cliente,cliente_cnpj_cpf,
 				codigo_erp_condicao_pagamento,codigo_erp_forma_pagamento,codigo_erp_transportadora,
 				endereco_ident_faturamento,endereco_ident_entrega,endereco_ident_cobranca,
 				valor_frete,observacoes_pedido,observacoes_nota_fiscal,situacao_app
-			) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,
-				(SELECT cnpj_cpf FROM cliente WHERE codigo=$10),
-				$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)`,
+			) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
+				(SELECT cnpj_cpf FROM cliente WHERE codigo=$11),
+				$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)`,
 			tenantID, empresaID, orderID, orderERP, orderNumber, input.NumeroCliente,
-			input.Tipo == "orcamento", emissao, customerCode, input.ClienteID,
+			input.Tipo == "orcamento", emissao, orderDelivery, customerCode, input.ClienteID,
 			conditionCode, methodCode, carrierCode, addressCodes[0], addressCodes[1],
 			addressCodes[2], input.ValorFrete, input.ObservacoesPedido,
 			input.ObservacoesNotaFiscal, status)
@@ -587,16 +591,16 @@ func (s *Service) AtualizarPedido(ctx context.Context, tenantID, empresaID, id i
 			addressCodes[index] = &code
 		}
 		_, err = tx.Exec(ctx, `UPDATE pedido SET
-			nro_pedido_cliente=$4,e_um_orcamento=$5,data_emissao=$6,codigo_erp_cliente=$7,
-			cliente_cnpj_cpf=(SELECT cnpj_cpf FROM cliente WHERE codigo=$8),
-			codigo_erp_condicao_pagamento=$9,codigo_erp_forma_pagamento=$10,
-			codigo_erp_transportadora=$11,endereco_ident_faturamento=$12,
-			endereco_ident_entrega=$13,endereco_ident_cobranca=$14,valor_frete=$15,
-			observacoes_pedido=$16,observacoes_nota_fiscal=$17,
-			situacao_app=CASE WHEN $18 THEN $19 ELSE situacao_app END
+			nro_pedido_cliente=$4,e_um_orcamento=$5,data_emissao=$6,data_entrega=$7,codigo_erp_cliente=$8,
+			cliente_cnpj_cpf=(SELECT cnpj_cpf FROM cliente WHERE codigo=$9),
+			codigo_erp_condicao_pagamento=$10,codigo_erp_forma_pagamento=$11,
+			codigo_erp_transportadora=$12,endereco_ident_faturamento=$13,
+			endereco_ident_entrega=$14,endereco_ident_cobranca=$15,valor_frete=$16,
+			observacoes_pedido=$17,observacoes_nota_fiscal=$18,
+			situacao_app=CASE WHEN $19 THEN $20 ELSE situacao_app END
 			WHERE cod_tenant=$1 AND cod_empresa=$2 AND codigo=$3`,
 			tenantID, empresaID, id, input.NumeroCliente, input.Tipo == "orcamento", emission,
-			customerCode, *input.ClienteID, conditionCode, methodCode, carrierCode,
+			orderDelivery, customerCode, *input.ClienteID, conditionCode, methodCode, carrierCode,
 			addressCodes[0], addressCodes[1], addressCodes[2], input.ValorFrete,
 			input.ObservacoesPedido, input.ObservacoesNotaFiscal, statusProvided, status)
 		if err != nil {

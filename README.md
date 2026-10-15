@@ -518,6 +518,3 @@ git commit -m "feat(api): implementa endpoints de escrita (POST/PUT/DELETE)
 # 3. Agora sim, rebase
 git pull origin main
 
-# 4. Se deu conflito: resolve + git add + git rebase --continue
-# 5. Se não: push
-git push
