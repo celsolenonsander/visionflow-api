@@ -7,8 +7,13 @@ força de vendas, com suporte a **white label** e integração com ERP.
 - As 40 operações do OpenAPI têm rotas e handlers registrados; as pendências de
   regra/semântica estão listadas em “Limitações e validação” e no relatório.
 - CEP e CNPJ usam serviços externos (ViaCEP e BrasilAPI).
-- Testes unitários foram adicionados, mas não puderam ser executados neste
-  ambiente porque o executável Go não está disponível; build não verificado.
+- Auth, catálogo, clientes, agenda, tarefas, Home, shell e notificações já têm
+  módulos em `internal/features`; pedidos/orçamentos ainda estão no service
+  compartilhado.
+- `go test ./...`, `go build ./...` e `go vet ./...` passaram em 2026-10-15.
+  Testes de integração com PostgreSQL ainda não foram executados; a migration
+  V011 (`pgcrypto`) está pendente no banco de desenvolvimento. O inventário por
+  operação está em [`docs/api-operation-inventory.md`](docs/api-operation-inventory.md).
 
 ---
 
@@ -44,6 +49,8 @@ REVENDEDOR (white label — quem revende com marca própria)
 
 **Isolamento multi-tenant** feito via **Row-Level Security (RLS)** do
 PostgreSQL — mesmo que a API esqueça de filtrar, o banco filtra.
+No Compose atual, `epare` é superuser e ignora RLS; esse ambiente não comprova
+isolamento até a aplicação usar um papel PostgreSQL não privilegiado.
 
 ---
 
@@ -51,7 +58,7 @@ PostgreSQL — mesmo que a API esqueça de filtrar, o banco filtra.
 
 | Camada | Tecnologia | Versão |
 |--------|-----------|--------|
-| Backend | Go | 1.24+ |
+| Backend | Go | 1.25+ |
 | Router | go-chi/chi | v5 |
 | Auth | golang-jwt/jwt | v5 |
 | Banco | PostgreSQL | 16 |
@@ -74,20 +81,34 @@ visionflow-api/
 │   │   ├── middleware.go
 │   │   ├── routes.go
 │   │   └── swagger.go
+│   ├── features/                   # Domínios já migrados
+│   │   ├── auth/                   # Login e repository de usuários
+│   │   ├── catalogo/               # Consultas read-only dos catálogos
+│   │   ├── cliente/                # Clientes, endereços, títulos e CEP/CNPJ
+│   │   ├── agenda/                 # Compromissos
+│   │   ├── tarefa/                 # Tarefas do usuário
+│   │   ├── home/                   # Indicadores
+│   │   ├── shell/                  # Empresa e usuário da sessão
+│   │   └── notificacao/            # Listagem e contador
+│   ├── db/                         # Pool, sessões RLS e helpers pgx
 │   ├── logger/                     # Logger estruturado
-│   ├── mockdata/                   # Dados mockados (temporário)
 │   ├── models/                     # Structs de domínio
-│   └── service/                    # Camada de serviço
+│   └── service/                    # Fachadas e domínios ainda não migrados
 ├── db/
 │   ├── flyway.conf.example         # Template de config do Flyway
 │   ├── README.md                   # Detalhes de banco
-│   ├── migrations/                 # Migrations versionadas (V001 → V006)
+│   ├── migrations/                 # Migrations versionadas (V001 → V011)
 │   │   ├── V001__nucleo_saas.sql
 │   │   ├── V002__cadastros_base.sql
 │   │   ├── V003__cadastros_operacionais.sql
 │   │   ├── V004__tabelas_filho.sql
 │   │   ├── V005__rls.sql
-│   │   └── V006__indices_unicos_seeds.sql
+│   │   ├── V006__indices_unicos_seeds.sql
+│   │   ├── V007__pedido_situacao_app.sql
+│   │   ├── V008__notificacao.sql
+│   │   ├── V009__agenda_tarefa.sql
+│   │   ├── V010__empresa_regional.sql
+│   │   └── V011__pgcrypto_password_validation.sql
 │   ├── seeds/
 │   │   └── demo_comercial/         # Dados de demonstração
 │   └── scripts/                    # Automação
@@ -110,7 +131,7 @@ visionflow-api/
 
 ## Requisitos
 
-- **Go 1.24+**
+- **Go 1.25+** (versão declarada em `go.mod`)
 - **PostgreSQL 16** (rodando localmente ou remoto)
 - **Flyway 13.7.0** (em `tools/` ou global)
 - **Internet** na primeira execução (baixar dependências Go)
@@ -128,21 +149,24 @@ cp .env.example .env
 Edite o `.env` e preencha:
 
 ```env
-DB_HOST=localhost
+DB_HOST=<HOST_DO_POSTGRES>
 DB_PORT=5432
 DB_NAME=epare_forca_de_vendas
 DB_USER=epare
 DB_PASSWORD=<SUA_SENHA>
 DB_SSLMODE=disable
 
-SERVER_PORT=8080
+PORT=8080
 JWT_SECRET=<STRING_ALEATORIA_32_CHARS>
 CORS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
-APP_ENV=development
 ```
 
-Os tokens de login expiram em 8 horas, conforme o contrato OpenAPI. A
-configuração `JWT_EXPIRATION_HOURS` não é lida pela API.
+`DB_HOST`, `DB_PORT`, `DB_SSLMODE` e as demais configurações são lidas do
+ambiente ou do `.env`; não é necessário usar `localhost` em ambientes remotos.
+
+Os tokens de login expiram em 8 horas, conforme o contrato OpenAPI. Embora
+`JWT_EXPIRATION` seja carregada na configuração, o handler mantém o prazo fixo
+de 8 horas do contrato.
 
 Para gerar uma chave JWT forte:
 
@@ -237,6 +261,20 @@ O login valida o hash com `pgcrypto`; aplique `V011__pgcrypto_password_validatio
 antes de usar a autenticação. O Swagger UI serve uma cópia embutida de
 `docs/openapi.yaml`.
 
+### Testes e compilação
+
+```bash
+go test ./...
+go build ./...
+go vet ./...
+```
+
+Não há testes de integração com PostgreSQL configurados. A suíte atual cobre
+helpers, autenticação/JSON HTTP e chamadas CEP/CNPJ mockadas; operações SQL de
+validação de cliente estão cobertas sem banco; operações SQL de leitura e escrita
+ainda precisam de testes em banco de teste isolado. Consulte
+[`docs/api-operation-inventory.md`](docs/api-operation-inventory.md).
+
 ---
 
 ## Autenticação
@@ -264,7 +302,10 @@ Authorization: Bearer <token>
 
 ### Estrutura
 
-O banco segue o padrão multi-tenant com **62 tabelas**:
+O schema versionado segue o padrão multi-tenant e inclui tabelas operacionais,
+notificações, agenda e tarefas. Consulte `docs/schema.sql` e as migrations para
+a definição completa; a instalação observada no desenvolvimento estava no
+baseline 5 + V006–V010, com V011 pendente.
 
 | Grupo | Quantidade | Exemplos |
 |-------|-----------|----------|
@@ -282,7 +323,9 @@ O banco segue o padrão multi-tenant com **62 tabelas**:
 
 ### Flyway
 
-O projeto usa **Flyway** para versionar o schema. Estado atual: **versão 6**.
+O projeto usa **Flyway** para versionar o schema. O repositório contém migrations
+V001–V011. O histórico do banco de desenvolvimento verificado em 2026-10-15
+estava no baseline 5 + V006–V010; confirme `info` antes de migrar outro ambiente.
 
 **Comandos principais:**
 
@@ -407,5 +450,6 @@ corrigindo, ou apague o banco e recrie (`reset_db.sh`).
 
 ### RLS não filtra
 
-Você provavelmente está conectado como superuser (`postgres`), que
-**ignora RLS**. Conecte com o usuário da API (`epare`).
+Superusers e papéis com `BYPASSRLS` ignoram RLS. No Compose atual, `epare` é
+superuser; use um papel de aplicação com privilégios restritos antes de
+considerar o isolamento multi-tenant validado.

@@ -2,6 +2,8 @@ package config
 
 import (
 	"fmt"
+	"net"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -20,6 +22,7 @@ type Config struct {
 	DBUser            string
 	DBPassword        string
 	DBName            string
+	DBSSLMode         string
 	DBPoolMaxConns    int32
 	DBPoolMinConns    int32
 	DBPoolMaxLifetime time.Duration
@@ -45,6 +48,7 @@ func Load() (*Config, error) {
 		DBUser:             getEnv("DB_USER", ""),
 		DBPassword:         getEnv("DB_PASSWORD", ""),
 		DBName:             getEnv("DB_NAME", ""),
+		DBSSLMode:          getEnv("DB_SSLMODE", "disable"),
 		DBPoolMaxConns:     int32(getEnvInt("DB_POOL_MAX_CONNS", 10)),
 		DBPoolMinConns:     int32(getEnvInt("DB_POOL_MIN_CONNS", 2)),
 		DBPoolMaxLifetime:  getEnvDuration("DB_POOL_MAX_CONN_LIFETIME", 30*time.Minute),
@@ -83,10 +87,16 @@ func (c *Config) validate() error {
 
 // DSN retorna a string de conexão do Postgres (formato URL).
 func (c *Config) DSN() string {
-	return fmt.Sprintf(
-		"postgres://%s:%s@%s:%s/%s?sslmode=disable",
-		c.DBUser, c.DBPassword, c.DBHost, c.DBPort, c.DBName,
-	)
+	connectionURL := url.URL{
+		Scheme: "postgres",
+		User:   url.UserPassword(c.DBUser, c.DBPassword),
+		Host:   net.JoinHostPort(c.DBHost, c.DBPort),
+		Path:   "/" + c.DBName,
+	}
+	query := connectionURL.Query()
+	query.Set("sslmode", c.DBSSLMode)
+	connectionURL.RawQuery = query.Encode()
+	return connectionURL.String()
 }
 
 // ─── Helpers ─────────────────────────────────────────────────

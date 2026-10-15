@@ -4,11 +4,12 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/celsolenonsander/visionflow-api/internal/service"
+	"github.com/golang-jwt/jwt/v5"
 )
 
 func TestExtractBearerToken(t *testing.T) {
@@ -120,5 +121,72 @@ func TestWriteServiceErrorForInvalidInput(t *testing.T) {
 
 	if recorder.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusBadRequest)
+	}
+}
+
+func TestProtectedRouteRejectsMissingOrInvalidToken(t *testing.T) {
+	handler := (&Handler{}).Routes()
+	tests := []struct {
+		name       string
+		authorize  string
+		wantStatus int
+		wantCode   string
+	}{
+		{name: "missing token", wantStatus: http.StatusUnauthorized, wantCode: "NAO_AUTENTICADO"},
+		{name: "invalid token", authorize: "Bearer invalid", wantStatus: http.StatusUnauthorized, wantCode: "TOKEN_INVALIDO"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			request := httptest.NewRequest(http.MethodGet, "/clientes", nil)
+			if test.authorize != "" {
+				request.Header.Set("Authorization", test.authorize)
+			}
+			recorder := httptest.NewRecorder()
+			handler.ServeHTTP(recorder, request)
+
+			if recorder.Code != test.wantStatus {
+				t.Fatalf("status = %d, want %d", recorder.Code, test.wantStatus)
+			}
+			var response struct {
+				Error struct {
+					Code string `json:"code"`
+				} `json:"error"`
+			}
+			if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+				t.Fatalf("decode response: %v", err)
+			}
+			if response.Error.Code != test.wantCode {
+				t.Fatalf("error code = %q, want %q", response.Error.Code, test.wantCode)
+			}
+		})
+	}
+}
+
+func TestDecodeRejectsInvalidRequestBodies(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+	}{
+		{name: "unknown field", body: `{"email":"a@example.test","extra":true}`},
+		{name: "multiple JSON values", body: `{"email":"a@example.test"} {}`},
+		{name: "malformed JSON", body: `{"email":`},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			request := httptest.NewRequest(http.MethodPost, "/auth/login", strings.NewReader(test.body))
+			recorder := httptest.NewRecorder()
+			var payload struct {
+				Email string `json:"email"`
+			}
+
+			if decode(recorder, request, &payload) {
+				t.Fatal("decode() accepted an invalid request body")
+			}
+			if recorder.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want %d", recorder.Code, http.StatusBadRequest)
+			}
+		})
 	}
 }

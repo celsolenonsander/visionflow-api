@@ -2,107 +2,160 @@ package service
 
 import (
 	"context"
-	"errors"
-	"fmt"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/celsolenonsander/visionflow-api/internal/db"
+	"github.com/celsolenonsander/visionflow-api/internal/features/agenda"
+	"github.com/celsolenonsander/visionflow-api/internal/features/auth"
+	"github.com/celsolenonsander/visionflow-api/internal/features/catalogo"
+	"github.com/celsolenonsander/visionflow-api/internal/features/cliente"
+	"github.com/celsolenonsander/visionflow-api/internal/features/home"
+	"github.com/celsolenonsander/visionflow-api/internal/features/notificacao"
+	"github.com/celsolenonsander/visionflow-api/internal/features/shell"
+	"github.com/celsolenonsander/visionflow-api/internal/features/tarefa"
 	"github.com/celsolenonsander/visionflow-api/internal/models"
-	"github.com/celsolenonsander/visionflow-api/internal/repository"
+	"github.com/celsolenonsander/visionflow-api/internal/platform/apperrors"
 )
 
-var ErrInvalidCredentials = errors.New("E-mail ou senha incorretos.")
-var ErrInvalidInput = errors.New("requisição inválida")
-var ErrDuplicateResource = errors.New("recurso duplicado")
+var ErrInvalidCredentials = auth.ErrInvalidCredentials
+var ErrInvalidInput = apperrors.ErrInvalidInput
+var ErrDuplicateResource = apperrors.ErrDuplicateResource
 
 func InvalidInput(message string) error {
-	return fmt.Errorf("%w: %s", ErrInvalidInput, message)
+	return apperrors.InvalidInput(message)
 }
 
 type Service struct {
-	pool        *db.Pool
-	clienteRepo *repository.ClienteRepo
+	pool         *db.Pool
+	auth         *auth.Service
+	catalogo     *catalogo.Service
+	notificacoes *notificacao.Service
+	cliente      *cliente.Service
+	agenda       *agenda.Service
+	tarefa       *tarefa.Service
+	home         *home.Service
+	shell        *shell.Service
 }
 
 func New(pool *db.Pool) *Service {
 	return &Service{
-		pool:        pool,
-		clienteRepo: repository.NewClienteRepo(),
+		pool:         pool,
+		auth:         auth.New(pool),
+		catalogo:     catalogo.New(pool),
+		notificacoes: notificacao.New(pool),
+		cliente:      cliente.New(pool),
+		agenda:       agenda.New(pool),
+		tarefa:       tarefa.New(pool),
+		home:         home.New(pool),
+		shell:        shell.New(pool),
 	}
+}
+
+func (s *Service) Catalogo(ctx context.Context, tenantID, empresaID, userID int, recurso, busca string, limit, cursor int) ([]map[string]any, string, error) {
+	return s.catalogo.List(ctx, tenantID, empresaID, userID, recurso, busca, limit, cursor)
 }
 
 // ─── AUTH ───────────────────────────────────────────────────
 
 func (s *Service) Login(ctx context.Context, email, senha string) (models.Usuario, error) {
-	const query = `
-		SELECT u.cod_usuario, u.nome, u.email
-		FROM usuario u
-		JOIN usuario_empresa ue ON ue.cod_usuario=u.cod_usuario
-		JOIN empresa e ON e.cod_tenant=ue.cod_tenant AND e.cod_empresa=ue.cod_empresa
-		JOIN tenant t ON t.cod_tenant=u.cod_tenant
-		WHERE lower(u.email)=lower($1)
-		  AND u.ativo=true AND e.ativo=true AND t.ativo=true
-		  AND ue.cod_tenant=u.cod_tenant
-		  AND crypt($2,u.senha_hash)=u.senha_hash
-		ORDER BY ue.empresa_padrao DESC, ue.cod_empresa ASC
-		LIMIT 1`
-	var user models.Usuario
-	err := s.pool.QueryRow(ctx, query, email, senha).Scan(&user.ID, &user.Nome, &user.Email)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return models.Usuario{}, ErrInvalidCredentials
-		}
-		return models.Usuario{}, fmt.Errorf("autenticar usuário: %w", err)
-	}
-	return user, nil
+	return s.auth.Login(ctx, email, senha)
 }
 
-// ─── CLIENTES ───────────────────────────────────────────────
-
-// Clientes retorna clientes paginados por cursor.
-// A sessão do banco já vem com cod_tenant/cod_empresa (RLS filtra).
-func (s *Service) Clientes(
-	ctx context.Context,
-	tenantID, empresaID int,
-	limit int,
-	cursor int,
-) ([]models.Cliente, string, error) {
-	sess, err := db.NewSession(ctx, s.pool, tenantID, empresaID)
-	if err != nil {
-		return nil, "", err
-	}
-	defer sess.Rollback(ctx)
-
-	clientes, next, err := s.clienteRepo.Listar(ctx, sess, limit, cursor)
-	if err != nil {
-		return nil, "", err
-	}
-
-	if err := sess.Commit(ctx); err != nil {
-		return nil, "", err
-	}
-	return clientes, next, nil
+func (s *Service) NotificacoesAPI(ctx context.Context, tenantID, empresaID, userID, limit, cursor int, lida *bool) ([]map[string]any, string, error) {
+	return s.notificacoes.List(ctx, tenantID, empresaID, userID, limit, cursor, lida)
 }
 
-// Cliente busca um cliente por ID.
-func (s *Service) Cliente(
-	ctx context.Context,
-	tenantID, empresaID int,
-	id int,
-) (*models.Cliente, error) {
-	sess, err := db.NewSession(ctx, s.pool, tenantID, empresaID)
-	if err != nil {
-		return nil, err
-	}
-	defer sess.Rollback(ctx)
+func (s *Service) ContagemNotificacoes(ctx context.Context, tenantID, empresaID, userID int) (int, error) {
+	return s.notificacoes.CountUnread(ctx, tenantID, empresaID, userID)
+}
 
-	c, err := s.clienteRepo.BuscarPorID(ctx, sess, id)
-	if err != nil {
-		return nil, err
-	}
+func (s *Service) ClientesAPI(ctx context.Context, tenantID, empresaID int, busca, status string, limit, cursor int) ([]map[string]any, string, error) {
+	return s.cliente.List(ctx, tenantID, empresaID, busca, status, limit, cursor)
+}
 
-	if err := sess.Commit(ctx); err != nil {
-		return nil, err
-	}
-	return c, nil
+func (s *Service) ClienteAPI(ctx context.Context, tenantID, empresaID, id int) (map[string]any, error) {
+	return s.cliente.Get(ctx, tenantID, empresaID, id)
+}
+
+func (s *Service) CriarCliente(ctx context.Context, tenantID, empresaID int, input models.ClienteCreate) (map[string]any, error) {
+	return s.cliente.Create(ctx, tenantID, empresaID, input)
+}
+
+func (s *Service) AtualizarCliente(ctx context.Context, tenantID, empresaID, id int, input models.ClienteCreate) (map[string]any, error) {
+	return s.cliente.Update(ctx, tenantID, empresaID, id, input)
+}
+
+func (s *Service) RemoverCliente(ctx context.Context, tenantID, empresaID, id int) error {
+	return s.cliente.Deactivate(ctx, tenantID, empresaID, id)
+}
+
+func (s *Service) EnderecosCliente(ctx context.Context, tenantID, empresaID, id int) ([]map[string]any, error) {
+	return s.cliente.ListAddresses(ctx, tenantID, empresaID, id)
+}
+
+func (s *Service) CriarEndereco(ctx context.Context, tenantID, empresaID, clienteID int, input models.EnderecoCreate) (map[string]any, error) {
+	return s.cliente.CreateAddress(ctx, tenantID, empresaID, clienteID, input)
+}
+
+func (s *Service) RemoverEndereco(ctx context.Context, tenantID, empresaID, clienteID, enderecoID int) error {
+	return s.cliente.RemoveAddress(ctx, tenantID, empresaID, clienteID, enderecoID)
+}
+
+func (s *Service) ContasReceberCliente(ctx context.Context, tenantID, empresaID, clienteID int) ([]map[string]any, error) {
+	return s.cliente.Receivables(ctx, tenantID, empresaID, clienteID)
+}
+
+func (s *Service) ConsultarCEP(ctx context.Context, cep string) (map[string]any, error) {
+	return s.cliente.ConsultarCEP(ctx, cep)
+}
+
+func (s *Service) ConsultarCNPJ(ctx context.Context, cnpj string) (map[string]any, error) {
+	return s.cliente.ConsultarCNPJ(ctx, cnpj)
+}
+
+func (s *Service) AgendaListar(ctx context.Context, tenantID, empresaID, userID, limit, cursor int, concluida *bool) ([]map[string]any, string, error) {
+	return s.agenda.List(ctx, tenantID, empresaID, userID, limit, cursor, concluida)
+}
+
+func (s *Service) CriarAgenda(ctx context.Context, tenantID, empresaID, userID int, input models.AgendaCreate) (map[string]any, error) {
+	return s.agenda.Create(ctx, tenantID, empresaID, userID, input)
+}
+
+func (s *Service) ObterAgenda(ctx context.Context, tenantID, empresaID, userID, id int) (map[string]any, error) {
+	return s.agenda.Get(ctx, tenantID, empresaID, userID, id)
+}
+
+func (s *Service) AtualizarAgenda(ctx context.Context, tenantID, empresaID, userID, id int, input models.AgendaCreate) (map[string]any, error) {
+	return s.agenda.Update(ctx, tenantID, empresaID, userID, id, input)
+}
+
+func (s *Service) ConcluirAgenda(ctx context.Context, tenantID, empresaID, userID, id int) (map[string]any, error) {
+	return s.agenda.Complete(ctx, tenantID, empresaID, userID, id)
+}
+
+func (s *Service) TarefasListar(ctx context.Context, tenantID, empresaID, userID, limit, cursor int, concluida *bool, prioridade string) ([]map[string]any, string, error) {
+	return s.tarefa.List(ctx, tenantID, empresaID, userID, limit, cursor, concluida, prioridade)
+}
+
+func (s *Service) CriarTarefa(ctx context.Context, tenantID, empresaID, userID int, input models.TarefaCreate) (map[string]any, error) {
+	return s.tarefa.Create(ctx, tenantID, empresaID, userID, input)
+}
+
+func (s *Service) ObterTarefa(ctx context.Context, tenantID, empresaID, userID, id int) (map[string]any, error) {
+	return s.tarefa.Get(ctx, tenantID, empresaID, userID, id)
+}
+
+func (s *Service) AtualizarTarefa(ctx context.Context, tenantID, empresaID, userID, id int, input models.TarefaCreate) (map[string]any, error) {
+	return s.tarefa.Update(ctx, tenantID, empresaID, userID, id, input)
+}
+
+func (s *Service) ConcluirTarefa(ctx context.Context, tenantID, empresaID, userID, id int) (map[string]any, error) {
+	return s.tarefa.Complete(ctx, tenantID, empresaID, userID, id)
+}
+
+func (s *Service) IndicadoresAPI(ctx context.Context, tenantID, empresaID, userID int) (map[string]any, error) {
+	return s.home.Indicators(ctx, tenantID, empresaID, userID)
+}
+
+func (s *Service) ShellEmpresaAPI(ctx context.Context, tenantID, empresaID, userID int) (map[string]any, error) {
+	return s.shell.Get(ctx, tenantID, empresaID, userID)
 }

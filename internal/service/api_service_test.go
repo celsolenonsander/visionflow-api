@@ -3,8 +3,6 @@ package service
 import (
 	"testing"
 	"time"
-
-	"github.com/celsolenonsander/visionflow-api/internal/models"
 )
 
 func TestValidPage(t *testing.T) {
@@ -53,15 +51,6 @@ func TestParseDateTime(t *testing.T) {
 	}
 }
 
-func TestBancoTipoPessoa(t *testing.T) {
-	if got := bancoTipoPessoa("PF"); got != "F" {
-		t.Fatalf("bancoTipoPessoa(PF) = %q, want F", got)
-	}
-	if got := bancoTipoPessoa("PJ"); got != "J" {
-		t.Fatalf("bancoTipoPessoa(PJ) = %q, want J", got)
-	}
-}
-
 func TestCalcularTotais(t *testing.T) {
 	items := []map[string]any{
 		{
@@ -69,8 +58,8 @@ func TestCalcularTotais(t *testing.T) {
 				"id": 88, "_volumes": 1, "_cubagem": 0.008,
 				"peso_liquido": 2.0, "peso_bruto": 2.1,
 			},
-			"quantidade_informada": 10.0,
-			"sale_price":            8.5,
+			"quantidade_informada":     10.0,
+			"sale_price":               8.5,
 			"valor_desconto_comercial": 5.0,
 		},
 	}
@@ -87,23 +76,4 @@ func TestCalcularTotais(t *testing.T) {
 	if got := totals["quantidade_mix"]; got != 1 {
 		t.Fatalf("quantidade_mix = %v, want 1", got)
 	}
-}
-
-func TestValidAgendaInput(t *testing.T) {
-	hour := "14:30"
-	input := models.AgendaCreate{
-		Titulo: "Visita", DataAgendada: "2026-10-14T00:00:00Z", HoraAgendada: &hour,
-	}
-	if _, err := validAgendaInput(input); err != nil {
-		t.Fatalf("validAgendaInput() error = %v", err)
-	}
-
-	input.HoraAgendada = stringPointer("25:00")
-	if _, err := validAgendaInput(input); err == nil {
-		t.Fatal("validAgendaInput() accepted an invalid hour")
-	}
-}
-
-func stringPointer(value string) *string {
-	return &value
 }

@@ -26,8 +26,10 @@ O projeto usa **PostgreSQL 16** com:
 - **White label** — suporta revendedores com marca própria (`revendedor`)
 - **Flyway** — controle de versão do schema
 
-**Estado atual do schema:** versão **5** (baseline)
-**Total de tabelas:** 62
+**Migrations no repositório:** V001 a V011. O banco de desenvolvimento
+inspecionado em 2026-10-15 estava no baseline 5 + V006 a V010; V011 estava
+pendente. Consulte `flyway info` antes de aplicar migrations em qualquer outro
+ambiente.
 
 ---
 
@@ -42,7 +44,13 @@ db/
 │   ├── V002__cadastros_base.sql
 │   ├── V003__cadastros_operacionais.sql
 │   ├── V004__tabelas_filho.sql
-│   └── V005__rls.sql
+│   ├── V005__rls.sql
+│   ├── V006__indices_unicos_seeds.sql
+│   ├── V007__pedido_situacao_app.sql
+│   ├── V008__notificacao.sql
+│   ├── V009__agenda_tarefa.sql
+│   ├── V010__empresa_regional.sql
+│   └── V011__pgcrypto_password_validation.sql
 ├── seeds/                   # Dados de teste (não vão para produção)
 ├── scripts/                 # Automação
 │   ├── reset_db.sh
