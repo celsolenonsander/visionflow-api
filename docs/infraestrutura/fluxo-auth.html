@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VisionFlow API — Fluxo de Autenticação e Multi-Tenant</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #0d1117;
+            color: #c9d1d9;
+            line-height: 1.6;
+            padding: 40px 20px;
+        }
+
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+
+        header {
+            border-bottom: 2px solid #30363d;
+            padding-bottom: 24px;
+            margin-bottom: 40px;
+        }
+
+        h1 {
+            font-size: 32px;
+            color: #f0f6fc;
+            margin-bottom: 8px;
+        }
+
+        .subtitle {
+            color: #8b949e;
+            font-size: 14px;
+        }
+
+        h2 {
+            font-size: 22px;
+            color: #58a6ff;
+            margin-top: 48px;
+            margin-bottom: 20px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #30363d;
+        }
+
+        h3 {
+            font-size: 16px;
+            color: #79c0ff;
+            margin-top: 28px;
+            margin-bottom: 12px;
+        }
+
+        p {
+            margin-bottom: 14px;
+            color: #c9d1d9;
+        }
+
+        code {
+            background: #161b22;
+            color: #ff7b72;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: "SF Mono", Monaco, Consolas, monospace;
+            font-size: 13px;
+        }
+
+        pre {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            padding: 16px;
+            overflow-x: auto;
+            margin-bottom: 16px;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        pre code {
+            background: none;
+            color: #c9d1d9;
+            padding: 0;
+        }
+
+        .flow-step {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-left: 4px solid #58a6ff;
+            border-radius: 6px;
+            padding: 20px;
+            margin-bottom: 16px;
+        }
+
+        .flow-step .step-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+
+        .step-number {
+            background: #58a6ff;
+            color: #0d1117;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 14px;
+            flex-shrink: 0;
+        }
+
+        .step-title {
+            font-weight: 600;
+            color: #f0f6fc;
+            font-size: 15px;
+        }
+
+        .box {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+
+        .box.response {
+            border-left: 4px solid #3fb950;
+        }
+
+        .box.error {
+            border-left: 4px solid #f85149;
+        }
+
+        .box.info {
+            border-left: 4px solid #d29922;
+        }
+
+        .box-title {
+            font-weight: 600;
+            color: #f0f6fc;
+            font-size: 13px;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+            background: #161b22;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        th, td {
+            padding: 12px 16px;
+            text-align: left;
+            border-bottom: 1px solid #30363d;
+            font-size: 14px;
+        }
+
+        th {
+            background: #1c2128;
+            color: #f0f6fc;
+            font-weight: 600;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        .ascii-diagram {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            padding: 20px;
+            overflow-x: auto;
+            font-family: "SF Mono", Monaco, Consolas, monospace;
+            font-size: 12px;
+            line-height: 1.4;
+            color: #c9d1d9;
+            white-space: pre;
+            margin-bottom: 20px;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .badge.ok {
+            background: #238636;
+            color: #fff;
+        }
+
+        .badge.warn {
+            background: #9e6a03;
+            color: #fff;
+        }
+
+        .badge.err {
+            background: #da3633;
+            color: #fff;
+        }
+
+        .badge.info {
+            background: #1f6feb;
+            color: #fff;
+        }
+
+        .note {
+            background: #161b22;
+            border-left: 4px solid #d29922;
+            padding: 14px 18px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+
+        .note strong {
+            color: #d29922;
+        }
+
+        footer {
+            margin-top: 60px;
+            padding-top: 24px;
+            border-top: 1px solid #30363d;
+            text-align: center;
+            color: #8b949e;
+            font-size: 13px;
+        }
+
+        ul {
+            margin-left: 24px;
+            margin-bottom: 16px;
+        }
+
+        li {
+            margin-bottom: 6px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🔐 VisionFlow API</h1>
+            <div class="subtitle">Fluxo de Autenticação, Multi-Tenant e Row-Level Security</div>
+        </header>
+
+        <h2>📋 Visão Geral</h2>
+        <p>
+            A VisionFlow API é um SaaS multi-tenant com 3 níveis de isolamento:
+            <strong>Revendedor</strong> (white label) → <strong>Tenant</strong> (cliente) →
+            <strong>Empresa</strong> (CNPJ). O isolamento de dados é feito via
+            <strong>Row-Level Security (RLS)</strong> do PostgreSQL, garantindo que
+            mesmo bugs na API não vazem dados entre tenants.
+        </p>
+
+        <div class="ascii-diagram">
+┌─────────────────────────────────────────────────────────────┐
+│  REVENDEDOR (white label — opcional)                        │
+│  ├── TENANT (cliente que opera o sistema)                   │
+│  │   ├── EMPRESA 1 (CNPJ matriz)                            │
+│  │   │   └── Cliente / Pedido / Notificação / ...           │
+│  │   ├── EMPRESA 2 (CNPJ filial)                            │
+│  │   │   └── Cliente / Pedido / Notificação / ...           │
+│  │   └── USUÁRIO (acessa uma ou mais empresas)              │
+└─────────────────────────────────────────────────────────────┘
+        </div>
+
+        <h2>🎯 O que o front precisa saber</h2>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Conceito</th>
+                    <th>O front manda?</th>
+                    <th>O backend resolve?</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><code>email</code> + <code>senha</code></td>
+                    <td>✅ No login</td>
+                    <td>—</td>
+                </tr>
+                <tr>
+                    <td><code>token</code> (JWT)</td>
+                    <td>✅ Em cada request</td>
+                    <td>—</td>
+                </tr>
+                <tr>
+                    <td><code>cod_tenant</code></td>
+                    <td>❌ Nunca</td>
+                    <td>✅ Lê do banco</td>
+                </tr>
+                <tr>
+                    <td><code>cod_empresa</code></td>
+                    <td>❌ Nunca</td>
+                    <td>✅ Lê do banco</td>
+                </tr>
+                <tr>
+                    <td><code>cod_usuario</code></td>
+                    <td>❌ Nunca</td>
+                    <td>✅ Extrai do JWT</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="note">
+            <strong>⚠️ Regra de ouro:</strong> O front <strong>nunca</strong> envia
+            <code>tenant</code> nem <code>empresa</code>. Tudo é resolvido pelo
+            backend a partir do JWT + tabela <code>usuario_empresa</code>.
+        </div>
+
+        <h2>🔑 Fluxo 1 — Login</h2>
+
+        <div class="flow-step">
+            <div class="step-header">
+                <div class="step-number">1</div>
+                <div class="step-title">Front envia credenciais</div>
+            </div>
+            <pre><code>POST /auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@epare.com.br",
+  "senha": "123456"
+}</code></pre>
+        </div>
+
+        <div class="flow-step">
+            <div class="step-header">
+                <div class="step-number">2</div>
+                <div class="step-title">Backend consulta o banco</div>
+            </div>
+            <pre><code>SELECT u.cod_usuario, u.nome, u.email
+FROM usuario u
+JOIN usuario_empresa ue ON ue.cod_usuario = u.cod_usuario
+JOIN empresa e ON e.cod_tenant = ue.cod_tenant
+               AND e.cod_empresa = ue.cod_empresa
+JOIN tenant t ON t.cod_tenant = u.cod_tenant
+WHERE lower(u.email) = lower($1)
+  AND u.ativo = true
+  AND e.ativo = true
+  AND t.ativo = true
+  AND crypt($2, u.senha_hash) = u.senha_hash
+ORDER BY ue.empresa_padrao DESC, ue.cod_empresa ASC
+LIMIT 1</code></pre>
+        </div>
+
+        <div class="flow-step">
+            <div class="step-header">
+                <div class="step-number">3</div>
+                <div class="step-title">Backend emite JWT</div>
+            </div>
+            <pre><code>{
+  "sub": 1,           // cod_usuario
+  "iat": 1792077419,  // emitido em
+  "exp": 1792106219   // expira em 8h
+}</code></pre>
+            <div class="note">
+                <strong>⚠️ Importante:</strong> O JWT <strong>não contém</strong>
+                <code>cod_tenant</code> nem <code>cod_empresa</code>. Só o
+                <code>sub</code> (cod_usuario).
+            </div>
+        </div>
+
+        <div class="flow-step">
+            <div class="step-header">
+                <div class="step-number">4</div>
+                <div class="step-title">Backend responde</div>
+            </div>
+            <div class="box response">
+                <div class="box-title">✅ 200 OK</div>
+                <pre><code>{
+  "success": true,
+  "data": {
+    "usuario": {
+      "id": 1,
+      "nome": "Administrador",
+      "email": "admin@epare.com.br",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+    }
+  },
+  "error": null
+}</code></pre>
+            </div>
+        </div>
+
+        <div class="flow-step">
+            <div class="step-header">
+                <div class="step-number">5</div>
+                <div class="step-title">Front guarda o token</div>
+            </div>
+            <p>Salva em <code>localStorage</code> (chave <code>visionflow:auth</code>):</p>
+            <pre><code>localStorage.setItem('visionflow:auth', JSON.stringify({
+  state: {
+    user: { id, nome, email },
+    token: "eyJ..."
+  }
+}))</code></pre>
+        </div>
+
+        <h2>🔄 Fluxo 2 — Requisição autenticada</h2>
+
+        <div class="flow-step">
+            <div class="step-header">
+                <div class="step-number">1</div>
+                <div class="step-title">Front envia request com token</div>
+            </div>
+            <pre><code>GET /clientes
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...</code></pre>
+        </div>
+
+        <div class="flow-step">
+            <div class="step-header">
+                <div class="step-number">2</div>
+                <div class="step-title">Middleware Auth valida o JWT</div>
+            </div>
+            <pre><code>// 1. Extrai o token do header
+tokenStr := extractBearerToken(r)
+
+// 2. Valida a assinatura
+claims := parseToken(tokenStr)
+// claims = { sub: 1, iat: ..., exp: ... }
+
+// 3. Extrai o cod_usuario
+userID := extractUserID(claims)  // = 1</code></pre>
+        </div>
+
+        <div class="flow-step">
+            <div class="step-header">
+                <div class="step-number">3</div>
+                <div class="step-title">Middleware resolve tenant/empresa</div>
+            </div>
+            <pre><code>SELECT cod_tenant, cod_empresa
+FROM usuario_empresa
+WHERE cod_usuario = $1
+ORDER BY empresa_padrao DESC, cod_empresa ASC
+LIMIT 1
+
+-- Resultado: cod_tenant = 1, cod_empresa = 1</code></pre>
+            <div class="note">
+                <strong>⚠️ Essa query roda FORA do RLS</strong> — a sessão ainda
+                não tem <code>SET LOCAL app.cod_tenant</code>. Por isso ela usa
+                o pool direto, não a Session.
+            </div>
+        </div>
+
+        <div class="flow-step">
+            <div class="step-header">
+                <div class="step-number">4</div>
+                <div class="step-title">Middleware injeta no contexto</div>
+            </div>
+            <pre><code>ctx := context.WithValue(r.Context(), "user_id", 1)
+ctx = context.WithValue(ctx, "tenant_id", 1)
+ctx = context.WithValue(ctx, "empresa_id", 1)
+
+next.ServeHTTP(w, r.WithContext(ctx))</code></pre>
+        </div>
+
+        <div class="flow-step">
+            <div class="step-header">
+                <div class="step-number">5</div>
+                <div class="step-title">Handler abre Session com RLS</div>
+            </div>
+            <p>O service faz:</p>
+            <pre><code>sess, _ := db.NewSession(ctx, pool, tenantID=1, empresaID=1)
+
+// Dentro de NewSession:
+BEGIN;
+SELECT set_config('app.cod_tenant', '1', true);
+SELECT set_config('app.cod_empresa', '1', true);</code></pre>
+            <div class="note">
+                <strong>💡 Por que <code>set_config</code> e não <code>SET LOCAL</code>?</strong>
+                <code>SET LOCAL</code> não aceita placeholders (<code>$1</code>).
+                <code>set_config('app.cod_tenant', $1, true)</code> aceita e o
+                <code>true</code> faz o escopo ser da transação.
+            </div>
+        </div>
+
+        <div class="flow-step">
+            <div class="step-header">
+                <div class="step-number">6</div>
+                <div class="step-title">Query é executada</div>
+            </div>
+            <pre><code>-- Repository escreve SEM mencionar tenant/empresa:
+SELECT codigo, codigo_erp, nome_razao_social, ...
+FROM cliente
+WHERE codigo > $1
+ORDER BY codigo ASC
+LIMIT $2</code></pre>
+        </div>
+
+        <div class="flow-step">
+            <div class="step-header">
+                <div class="step-number">7</div>
+                <div class="step-title">PostgreSQL aplica RLS automaticamente</div>
+            </div>
+            <pre><code>-- A query acima vira efetivamente:
+SELECT codigo, codigo_erp, nome_razao_social, ...
+FROM cliente
+WHERE codigo > $1
+  AND cod_tenant = fn_current_tenant()       -- = 1
+  AND (fn_current_empresa() IS NULL
+       OR cod_empresa = fn_current_empresa()) -- = 1
+ORDER BY codigo ASC
+LIMIT $2</code></pre>
+            <p>As funções <code>fn_current_tenant()</code> e <code>fn_current_empresa()</code> leem as variáveis <code>app.cod_tenant</code> e <code>app.cod_empresa</code> que foram setadas via <code>set_config</code>.</p>
+        </div>
+
+        <div class="flow-step">
+            <div class="step-header">
+                <div class="step-number">8</div>
+                <div class="step-title">Backend responde</div>
+            </div>
+            <div class="box response">
+                <div class="box-title">✅ 200 OK</div>
+                <pre><code>{
+  "success": true,
+  "data": {
+    "items": [
+      {
+        "id": 1,
+        "codigo_erp": "000001",
+        "nome_razao_social": "CLIENTE TESTE LTDA",
+        "cnpj_cpf": "22.222.222/0001-22",
+        ...
+      }
+    ],
+    "nextCursor": null
+  },
+  "error": null
+}</code></pre>
+            </div>
+        </div>
+
+        <h2>🛡️ Por que RLS importa</h2>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Cenário</th>
+                    <th>Sem RLS</th>
+                    <th>Com RLS</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Dev esquece <code>WHERE cod_tenant</code></td>
+                    <td><span class="badge err">Vaza dados</span></td>
+                    <td><span class="badge ok">Bloqueado</span></td>
+                </tr>
+                <tr>
+                    <td>SQL injection altera query</td>
+                    <td><span class="badge err">Vaza dados</span></td>
+                    <td><span class="badge ok">Bloqueado</span></td>
+                </tr>
+                <tr>
+                    <td>Token roubado de outro tenant</td>
+                    <td><span class="badge err">Vaza dados</span></td>
+                    <td><span class="badge ok">Bloqueado</span></td>
+                </tr>
+                <tr>
+                    <td>Bug em filtro de relatório</td>
+                    <td><span class="badge err">Vaza dados</span></td>
+                    <td><span class="badge ok">Bloqueado</span></td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h2>🧪 Validação end-to-end</h2>
+
+        <p>Provado em 2026-10-15 com os seguintes testes:</p>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Teste</th>
+                    <th>Resultado</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Sem contexto RLS</td>
+                    <td><code>SELECT COUNT(*) FROM cliente</code> → <strong>0</strong></td>
+                </tr>
+                <tr>
+                    <td>Tenant 1</td>
+                    <td><code>SELECT COUNT(*) FROM cliente</code> → <strong>1</strong></td>
+                </tr>
+                <tr>
+                    <td>Tenant 4</td>
+                    <td><code>SELECT COUNT(*) FROM cliente</code> → <strong>30</strong></td>
+                </tr>
+                <tr>
+                    <td>Tenant 1 tentando ver tenant 4</td>
+                    <td><span class="badge ok">Bloqueado</span></td>
+                </tr>
+                <tr>
+                    <td>API: user 1 → <code>GET /clientes</code></td>
+                    <td>Retorna <strong>1 cliente</strong></td>
+                </tr>
+                <tr>
+                    <td>API: user 3 → <code>GET /clientes</code></td>
+                    <td>Retorna <strong>30 clientes</strong></td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h2>⚠️ O que o front NÃO precisa fazer</h2>
+
+        <ul>
+            <li>❌ Enviar <code>cod_tenant</code> em query/body</li>
+            <li>❌ Enviar <code>cod_empresa</code> em query/body</li>
+            <li>❌ Gerenciar troca de empresa (ainda não implementado)</li>
+            <li>❌ Filtrar por tenant manualmente</li>
+            <li>❌ Decodificar JWT (o backend já resolve tudo)</li>
+        </ul>
+
+        <h2>✅ O que o front PRECISA fazer</h2>
+
+        <ul>
+            <li>✅ Fazer login com email + senha</li>
+            <li>✅ Guardar o <code>token</code> após login</li>
+            <li>✅ Enviar <code>Authorization: Bearer &lt;token&gt;</code> em toda requisição autenticada</li>
+            <li>✅ Tratar <code>401</code> (token inválido/expirado) → redirecionar pra login</li>
+            <li>✅ Tratar <code>403</code> (sem permissão) quando aparecer</li>
+        </ul>
+
+        <h2>🔮 Fluxos futuros (não implementados)</h2>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Feature</th>
+                    <th>Endpoint</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Trocar de empresa</td>
+                    <td><code>POST /auth/trocar-empresa</code></td>
+                    <td><span class="badge warn">Planejado</span></td>
+                </tr>
+                <tr>
+                    <td>Recuperar senha</td>
+                    <td><code>POST /auth/recuperar-senha</code></td>
+                    <td><span class="badge warn">Planejado</span></td>
+                </tr>
+                <tr>
+                    <td>Refresh token</td>
+                    <td><code>POST /auth/refresh</code></td>
+                    <td><span class="badge warn">Planejado</span></td>
+                </tr>
+                <tr>
+                    <td>Logout server-side (blacklist)</td>
+                    <td><code>POST /auth/logout</code> (revisar)</td>
+                    <td><span class="badge warn">Planejado</span></td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h2>📚 Glossário</h2>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Termo</th>
+                    <th>Significado</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><strong>Tenant</strong></td>
+                    <td>Cliente do revendedor que opera o sistema. Nível de billing e limites.</td>
+                </tr>
+                <tr>
+                    <td><strong>Empresa</strong></td>
+                    <td>CNPJ do tenant. Um tenant pode ter várias (matriz + filiais).</td>
+                </tr>
+                <tr>
+                    <td><strong>RLS</strong></td>
+                    <td>Row-Level Security — filtro automático por linha no PostgreSQL.</td>
+                </tr>
+                <tr>
+                    <td><strong>JWT</strong></td>
+                    <td>JSON Web Token — credencial assinada que identifica o usuário.</td>
+                </tr>
+                <tr>
+                    <td><strong>Session</strong></td>
+                    <td>Transação de banco com contexto de tenant/empresa injetado.</td>
+                </tr>
+                <tr>
+                    <td><strong>set_config</strong></td>
+                    <td>Função PostgreSQL para setar variáveis de sessão dentro de transação.</td>
+                </tr>
+                <tr>
+                    <td><strong>cursor pagination</strong></td>
+                    <td>Paginação por <code>nextCursor</code> em vez de <code>offset</code>/<code>page</code>.</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <footer>
+            <p>VisionFlow API — Documentação de Autenticação e Multi-Tenant</p>
+            <p>Última atualização: 2026-10-15</p>
+        </footer>
+    </div>
+</body>
+</html>
