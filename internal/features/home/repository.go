@@ -24,6 +24,7 @@ func (r *Repository) Indicators(ctx context.Context, tx pgx.Tx, tenantID, empres
 		      AND pi.cod_empresa=p.cod_empresa AND pi.codigo_erp_pedido=p.codigo_erp
 		    WHERE p.cod_tenant=$1 AND p.cod_empresa=$2
 		      AND COALESCE(p.apagar_dados_pedido,false)=false AND p.e_um_orcamento=false
+		      AND p.situacao_app='aprovado'
 		      AND p.data_emissao >= date_trunc('month',CURRENT_DATE)::date
 		      AND p.data_emissao < (date_trunc('month',CURRENT_DATE)+interval '1 month')::date),0) AS vendas_mes,
 		  COALESCE((SELECT SUM(pi.valor_total_produtos_liquido)
@@ -31,6 +32,7 @@ func (r *Repository) Indicators(ctx context.Context, tx pgx.Tx, tenantID, empres
 		      AND pi.cod_empresa=p.cod_empresa AND pi.codigo_erp_pedido=p.codigo_erp
 		    WHERE p.cod_tenant=$1 AND p.cod_empresa=$2
 		      AND COALESCE(p.apagar_dados_pedido,false)=false AND p.e_um_orcamento=false
+		      AND p.situacao_app='aprovado'
 		      AND p.data_emissao=CURRENT_DATE),0) AS vendas_hoje,
 		  (SELECT COUNT(*) FROM pedido WHERE cod_tenant=$1 AND cod_empresa=$2
 		    AND COALESCE(apagar_dados_pedido,false)=false AND situacao_app='em_digitacao'
@@ -38,9 +40,8 @@ func (r *Repository) Indicators(ctx context.Context, tx pgx.Tx, tenantID, empres
 		  (SELECT COUNT(*) FROM pedido WHERE cod_tenant=$1 AND cod_empresa=$2
 		    AND COALESCE(apagar_dados_pedido,false)=false AND situacao_app='em_digitacao'
 		    AND e_um_orcamento=true) AS orcamentos_em_digitacao,
-		  (SELECT COUNT(DISTINCT codigo_erp_cliente) FROM pedido
-		    WHERE cod_tenant=$1 AND cod_empresa=$2 AND COALESCE(apagar_dados_pedido,false)=false
-		      AND situacao_app='em_digitacao' AND codigo_erp_cliente IS NOT NULL) AS clientes_em_digitacao,
+		  (SELECT COUNT(*) FROM cliente
+		    WHERE cod_tenant=$1 AND cod_empresa=$2 AND COALESCE(prospect,false)=true) AS clientes_em_digitacao,
 		  (SELECT COUNT(*) FROM pedido WHERE cod_tenant=$1 AND cod_empresa=$2
 		    AND COALESCE(apagar_dados_pedido,false)=false AND situacao_app='aguardando_aprovacao'
 		    AND e_um_orcamento=false) AS pedidos_aguardando_aprovacao,

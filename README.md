@@ -453,3 +453,5 @@ corrigindo, ou apague o banco e recrie (`reset_db.sh`).
 Superusers e papéis com `BYPASSRLS` ignoram RLS. No Compose atual, `epare` é
 superuser; use um papel de aplicação com privilégios restritos antes de
 considerar o isolamento multi-tenant validado.
+
+

@@ -68,7 +68,8 @@ func (s *Service) PedidosListarAPI(ctx context.Context, tenantID, empresaID int,
 	var next string
 	err := s.withSession(ctx, tenantID, empresaID, func(tx pgx.Tx) error {
 		const query = `
-			SELECT p.codigo AS id, COALESCE(p.nosso_codigo_pedido,p.codigo_erp) AS numero,
+			SELECT p.codigo AS id, p.codigo_erp,
+			       COALESCE(p.nosso_codigo_pedido,p.codigo_erp) AS numero,
 			       CASE WHEN p.e_um_orcamento THEN 'orcamento' ELSE 'pedido' END AS tipo,
 			       c.nome_razao_social AS cliente_nome,
 			       CASE WHEN p.data_emissao IS NULL THEN NULL ELSE
@@ -168,8 +169,6 @@ func pedidoDetalhe(ctx context.Context, tx pgx.Tx, id int) (map[string]any, erro
 		delete(order, "cliente")
 	}
 	delete(order, "cliente_id")
-	delete(order, "cliente_nome")
-	delete(order, "cliente_cnpj_cpf")
 	order["empresa"] = map[string]any{"id": order["empresa_id"], "nome": order["empresa_nome"]}
 	delete(order, "empresa_id")
 	delete(order, "empresa_nome")
@@ -221,13 +220,15 @@ func pedidoItens(ctx context.Context, tx pgx.Tx, codigoErpPedido string) ([]map[
 		       COALESCE((SELECT SUM(ie.quantidade) FROM item_estoque ie
 		         WHERE ie.cod_tenant=i.cod_tenant AND ie.cod_empresa=i.cod_empresa
 		           AND ie.codigo_erp_item=i.codigo_erp),0) AS product_stock,
-		       COALESCE(i.peso_liquido,0) AS product_peso_liquido,
-		       COALESCE(i.peso_bruto,0) AS product_peso_bruto,
-		       COALESCE(i.cubagem_embalagem,0) AS product_cubagem,
-		       COALESCE(i.qtde_volumes_embalagem,0) AS product_volumes,
-		       pi.codigo_erp_tabela_preco,pi.preco_venda_praticado_digitado AS sale_price,
+		       COALESCE(i.peso_liquido,0)::double precision AS product_peso_liquido,
+		       COALESCE(i.peso_bruto,0)::double precision AS product_peso_bruto,
+		       COALESCE(i.cubagem_embalagem,0)::double precision AS product_cubagem,
+		       COALESCE(i.qtde_volumes_embalagem,0)::double precision AS product_volumes,
+		       pi.codigo_erp_tabela_preco,
+		       pi.preco_venda_praticado_digitado::double precision AS sale_price,
 		       pi.preco_venda_original_sugerido AS original_price,
-		       pi.quantidade_informada,pi.valor_desconto_comercial,
+		       pi.quantidade_informada::double precision AS quantidade_informada,
+		       pi.valor_desconto_comercial::double precision AS valor_desconto_comercial,
 		       pi.valor_total_produtos_liquido,
 		       CASE WHEN pi.data_entrega IS NULL THEN NULL ELSE
 		         to_char(pi.data_entrega::timestamp AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS"Z"') END AS data_entrega,
@@ -335,6 +336,7 @@ func calcularTotais(items []map[string]any) map[string]any {
 		"quantidade_mix": len(products), "quantidade_volume": volumeQty, "volume_total_cubico": cubic,
 		"peso_liquido": netWeight, "peso_bruto": grossWeight, "valor_bruto": gross,
 		"valor_desconto": discount, "valor_liquido": net,
+		"total_bruto": gross, "total_desconto": discount, "total_liquido": net,
 	}
 }
 

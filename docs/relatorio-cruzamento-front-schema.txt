@@ -1,3 +1,57 @@
+## Histórico de correções
+
+### 2026-10-15
+- V011 (pgcrypto) aplicada
+- V012 (fix hash do admin) criada e aplicada
+- Verificado: epare NÃO é superuser (rolsuper=f, rolbypassrls=f)
+- RLS validado end-to-end (psql + API)
+- Login real implementado e testado (POST /auth/login → 200)
+- Codespaces configurado (.devcontainer + compose.yaml)
+- Flyway 10.20.1 instalado e funcionando
+
+## A. Resumo
+
+Estado final: MVP funcional validado end-to-end.
+Login real, RLS provado, /clientes retornando dados do banco.
+Pendências: migrar pedidos para feature-first e implementar
+endpoints ainda mock.
+
+## D. Persistência e segurança
+
+- V011 (pgcrypto) aplicada. Banco em V012.
+- V012 corrige condicionalmente o hash placeholder do admin.
+- Verificado via pg_roles: epare tem rolsuper=f e rolbypassrls=f.
+  RLS é respeitado.
+- Validação de RLS via psql:
+  - Sem contexto: SELECT COUNT(*) FROM cliente → 0
+  - Tenant 1: SELECT COUNT(*) FROM cliente → 1
+  - Tenant 4: SELECT COUNT(*) FROM cliente → 30
+  - Tenant 1 tentando consultar dados do tenant 4: acesso bloqueado
+
+## F. Validações
+
+- RLS end-to-end via psql: VALIDADO
+- RLS end-to-end via API: VALIDADO (user 1 → 1, user 3 → 30)
+- Login real: VALIDADO (POST /auth/login → 200 + token)
+- GET /clientes autenticado: VALIDADO (retorna dados do banco)
+- Flyway migrate: VALIDADO (V001-V012 aplicadas)
+- Codespaces reproduzível: VALIDADO
+
+Endpoints ainda mock/não validados com dados reais:
+GET /home/indicadores, GET /shell/empresa, GET /notificacoes,
+CRUD /agenda e /tarefas, GET /pedidos e GET /pedidos/{id}.
+
+## H. Próximas ações
+
+1. Migrar pedidos/orçamentos para feature-first.
+2. Implementar atualização de pedidos (POST /pedidos ainda cria; falta
+   PUT /pedidos/{id}).
+3. Resolver decisões de contrato em aberto: edição de pedido (POST vs PUT),
+   vigência de tabela de preço, tipo de endereço (residencial não existe no
+   banco) e campos legados do front sem origem definida.
+4. Implementar endpoints ainda mock: indicadores, shell, notificações, agenda,
+   tarefas e pedidos.
+
 ================================================================================
 RELATÓRIO DE CRUZAMENTO — FRONT REACT × SCHEMA POSTGRESQL
 ================================================================================
@@ -6,10 +60,10 @@ Decisões........: API em snake_case; notificações consolidadas em 1 domínio;
                   conta a receber filtrada por codigo_erp_cliente + sessão;
                   títulos = contas a receber (read-only);
                   scroll infinito é requisito NOVO (front não usa hoje).
-Aviso inicial...: o schema NÃO cobre, sem derivação, três entidades do inventário:
-                  (a) notificações/avisos, (b) indicadores da Home,
-                  (c) regional da empresa. Também NÃO há tabela de agenda/tarefa
-                  (pendingAgendas / pendingTasks ficam sem origem).
+Aviso inicial...: o inventário detalhado abaixo foi escrito antes das correções
+                  registradas em "Histórico de correções". Para o estado atual,
+                  prevalecem as seções A, D, F e H acima e a atualização da API
+                  ao final deste documento.
 ================================================================================
 
 
@@ -629,8 +683,9 @@ DIVERGÊNCIAS OU DECISÕES AINDA PENDENTES
    seleção por UF ou outra regra.
 5. codigo_erp gerado com prefixo API- é provisório e precisa de política de
    reconciliação com o ERP para evitar colisão na integração.
-6. A migration V011 requer permissão para criar a extensão pgcrypto. O formato
-   dos hashes existentes deve ser compatível com crypt do PostgreSQL.
+6. V011 (pgcrypto) foi aplicada; o banco está em V012. A V012 corrige
+   condicionalmente o hash placeholder do administrador para permitir a
+   validação de senha por crypt do PostgreSQL.
 7. A descrição do GET /produtos menciona stock, mas Produto não o declarava.
    Foi adicionada a propriedade opcional ao OpenAPI e a implementação soma
    item_estoque.quantidade por tenant/empresa e produto.
@@ -658,10 +713,16 @@ VALIDAÇÃO
 - Smoke test em runtime: API conectou ao PostgreSQL configurado; `/health`
   respondeu 200, rota protegida sem token respondeu 401 e `/swagger.yaml`
   correspondeu a `docs/openapi.yaml`.
-- O PostgreSQL 16.15 foi inspecionado somente com consultas de leitura. O
-  histórico está no baseline 5 e nas migrations V006-V010; V011 está pendente e
-  `pgcrypto` não está instalado. Não foram executados testes de integração da
-  API com o banco. O papel `epare` é superuser e ignora RLS.
+- PostgreSQL 16: V011 (pgcrypto) e V012 estão aplicadas via Flyway. O papel
+  `epare` tem `rolsuper=f` e `rolbypassrls=f`; RLS foi validado end-to-end via
+  psql e API. O Codespaces foi configurado para instalar Flyway e aplicar as
+  migrations.
+- Login real foi validado: `POST /auth/login` retorna 200 e token. `GET
+  /clientes` autenticado retorna dados reais filtrados por RLS; user 1 vê 1
+  cliente e user 3 vê 30.
+- Ainda não validados com dados reais: `GET /home/indicadores`, `GET
+  /shell/empresa`, `GET /notificacoes`, CRUD de `/agenda` e `/tarefas`, `GET
+  /pedidos` e `GET /pedidos/{id}`.
 - Auth, catálogo, cliente, agenda, tarefa, home, shell e notificações foram
   organizados em `internal/features`; pedidos/orçamentos ainda permanecem em
   `internal/service/api_service.go`. As consultas das features cliente,

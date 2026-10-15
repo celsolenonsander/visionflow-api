@@ -133,6 +133,8 @@ type PedidoDetalhe struct {
 	StatusErp         *string      `json:"status_erp"`
 	StatusErpLabel    *string      `json:"status_erp_label"`
 	DataEmissao       string       `json:"data_emissao"`
+	ClienteNome       string       `json:"cliente_nome"`
+	ClienteCnpjCpf    string       `json:"cliente_cnpj_cpf"`
 	DataEntrega       string       `json:"data_entrega"`
 	Empresa           EmpresaRef   `json:"empresa"`
 	Cliente           ClienteRef   `json:"cliente"`
@@ -140,6 +142,7 @@ type PedidoDetalhe struct {
 	FormaPagamento    DescricaoRef `json:"forma_pagamento"`
 	Transportadora    NomeRef      `json:"transportadora"`
 	ValorFrete        float64      `json:"valor_frete"`
+	ObservacoesPedido string       `json:"observacoes_pedido"`
 	Itens             []PedidoItem `json:"itens"`
 	Totais            PedidoTotais `json:"totais"`
 }
