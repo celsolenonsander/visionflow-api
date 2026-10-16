@@ -3,17 +3,18 @@
   "dockerComposeFile": "../compose.yaml",
   "service": "workspace",
   "workspaceFolder": "/workspaces/visionflow-api",
-  "runServices": ["postgres", "workspace"],
+  "runServices": [
+    "postgres",
+    "workspace"
+  ],
   "shutdownAction": "stopCompose",
-  "forwardPorts": [8080, 5432],
+  "forwardPorts": [
+    8080
+  ],
   "portsAttributes": {
     "8080": {
       "label": "VisionFlow API",
       "onAutoForward": "notify"
-    },
-    "5432": {
-      "label": "PostgreSQL",
-      "onAutoForward": "silent"
     }
   },
   "customizations": {
@@ -27,5 +28,5 @@
     }
   },
   "postCreateCommand": "bash .devcontainer/setup.sh",
-  "remoteUser": "codespace"
+  "remoteUser": "vscode"
 }

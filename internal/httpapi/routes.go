@@ -58,6 +58,7 @@ func (h *Handler) Routes() http.Handler {
 		r.Get("/clientes/cnpj/{cnpj}", h.ClienteCNPJ)
 		r.Get("/clientes/{id}/enderecos", h.EnderecosCliente)
 		r.Post("/clientes/{id}/enderecos", h.CriarEndereco)
+		r.Put("/clientes/{id}/enderecos/{enderecoId}", h.AtualizarEndereco)
 		r.Delete("/clientes/{id}/enderecos/{enderecoId}", h.RemoverEndereco)
 		r.Get("/clientes/{id}/contas-receber", h.ContasReceberCliente)
 		r.Put("/clientes/{id}", h.AtualizarCliente)

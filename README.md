@@ -240,6 +240,7 @@ Serviços disponíveis:
 - `GET  /clientes/cnpj/{cnpj}`
 - `GET  /clientes/{id}/enderecos`
 - `POST /clientes/{id}/enderecos`
+- `PUT  /clientes/{id}/enderecos/{enderecoId}`
 - `DELETE /clientes/{id}/enderecos/{enderecoId}`
 - `GET  /clientes/{id}/contas-receber`
 - `GET  /cep/{cep}`
@@ -517,4 +518,3 @@ git commit -m "feat(api): implementa endpoints de escrita (POST/PUT/DELETE)
 
 # 3. Agora sim, rebase
 git pull origin main
-

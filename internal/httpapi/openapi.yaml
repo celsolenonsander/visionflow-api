@@ -550,6 +550,7 @@ paths:
                         cidade: São Paulo
                         estado: SP
                         ponto_referencia: Próximo ao MASP
+                        restricoes_horarios: Recebimento em horário comercial
                     error: null
         '401':
           $ref: '#/components/responses/Unauthorized'
@@ -587,6 +588,32 @@ paths:
         required: true
         schema:
           type: integer
+    put:
+      tags: [clientes]
+      summary: Atualizar endereço do cliente
+      description: |
+        Atualiza o endereço existente sem alterar seu ID ou código ERP.
+        A operação é transacional; se endereco_padrao=true, os demais endereços
+        padrão do mesmo cliente são desmarcados.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnderecoCreate'
+      responses:
+        '200':
+          description: Endereço atualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnderecoEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
     delete:
       tags: [clientes]
       summary: Remover endereço

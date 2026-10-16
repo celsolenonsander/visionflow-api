@@ -1,14 +1,11 @@
 services:
   postgres:
     image: postgres:16
-    container_name: visionflow-postgres
     restart: unless-stopped
     environment:
       POSTGRES_DB: epare_forca_de_vendas
       POSTGRES_USER: epare
       POSTGRES_PASSWORD: ${DB_PASSWORD:?Defina DB_PASSWORD no arquivo .env}
-    ports:
-      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -18,17 +15,16 @@ services:
       retries: 10
 
   workspace:
-    image: mcr.microsoft.com/devcontainers/go:1.24
-    container_name: visionflow-workspace
+    image: mcr.microsoft.com/devcontainers/go:1.25
     volumes:
-      - ..:/workspaces/visionflow-api:cached
+      - .:/workspaces/visionflow-api:cached
     command: sleep infinity
     depends_on:
       postgres:
         condition: service_healthy
     environment:
       DB_HOST: postgres
-      DB_PORT: 5432
+      DB_PORT: "5432"
       DB_USER: epare
       DB_PASSWORD: ${DB_PASSWORD}
       DB_NAME: epare_forca_de_vendas

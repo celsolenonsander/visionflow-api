@@ -167,6 +167,41 @@ func (h *Handler) RemoverEndereco(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true}, nil)
 }
 
+func (h *Handler) AtualizarEndereco(w http.ResponseWriter, r *http.Request) {
+	tenantID, empresaID, _, ok := authenticatedIDs(r)
+	if !ok {
+		bad(w, http.StatusUnauthorized, "NAO_AUTENTICADO", "Contexto de autenticação inválido.")
+		return
+	}
+	clienteID, err := requestID(chi.URLParam(r, "id"))
+	if err != nil {
+		bad(w, http.StatusBadRequest, "REQUISICAO_INVALIDA", "ID do cliente inválido.")
+		return
+	}
+	enderecoID, err := requestID(chi.URLParam(r, "enderecoId"))
+	if err != nil {
+		bad(w, http.StatusBadRequest, "REQUISICAO_INVALIDA", "ID do endereço inválido.")
+		return
+	}
+	var input models.EnderecoCreate
+	if !decode(w, r, &input) {
+		return
+	}
+	if strings.TrimSpace(input.TipoEndereco) == "" || strings.TrimSpace(input.CEP) == "" ||
+		strings.TrimSpace(input.Logradouro) == "" || strings.TrimSpace(input.NumeroEndereco) == "" ||
+		strings.TrimSpace(input.Bairro) == "" || strings.TrimSpace(input.Cidade) == "" ||
+		len(input.Estado) != 2 {
+		bad(w, http.StatusBadRequest, "REQUISICAO_INVALIDA", "Os campos obrigatórios do endereço devem ser preenchidos.")
+		return
+	}
+	result, err := h.Service.AtualizarEndereco(r.Context(), tenantID, empresaID, clienteID, enderecoID, input)
+	if err != nil {
+		writeServiceError(w, err, "Não foi possível atualizar o endereço.")
+		return
+	}
+	writeJSON(w, http.StatusOK, result, nil)
+}
+
 func (h *Handler) ContasReceberCliente(w http.ResponseWriter, r *http.Request) {
 	tenantID, empresaID, _, ok := authenticatedIDs(r)
 	if !ok {

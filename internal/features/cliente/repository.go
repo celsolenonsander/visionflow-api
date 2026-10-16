@@ -2,7 +2,6 @@ package cliente
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -204,12 +203,15 @@ func (r *Repository) Deactivate(ctx context.Context, tx pgx.Tx, tenantID, empres
 }
 
 func (r *Repository) CreateAddress(ctx context.Context, tx pgx.Tx, tenantID, empresaID, customerID int, input models.EnderecoCreate, dbType string) (map[string]any, error) {
-	customer, err := r.Get(ctx, tx, tenantID, empresaID, customerID)
+	customerERP, err := r.lockCustomer(ctx, tx, tenantID, empresaID, customerID)
 	if err != nil {
 		return nil, err
 	}
 	if input.EnderecoPadrao {
-		if _, err := tx.Exec(ctx, `UPDATE cliente_endereco_adicional SET endereco_padrao=false WHERE codigo_erp_cliente=$1`, customer["codigo_erp"]); err != nil {
+		if _, err := tx.Exec(ctx, `
+			UPDATE cliente_endereco_adicional SET endereco_padrao=false
+			WHERE cod_tenant=$1 AND cod_empresa=$2 AND codigo_erp_cliente=$3
+			  AND deletado_em IS NULL`, tenantID, empresaID, customerERP); err != nil {
 			return nil, fmt.Errorf("limpar endereço padrão: %w", err)
 		}
 	}
@@ -223,28 +225,87 @@ func (r *Repository) CreateAddress(ctx context.Context, tx pgx.Tx, tenantID, emp
 			cep,logradouro,numero_endereco,complemento_endereco,bairro,cidade,estado,tipo_endereco,
 			endereco_padrao,ponto_referencia,restricoes_horarios
 		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NULLIF($10,''),$11,$12,$13,$14,$15,NULLIF($16,''),NULLIF($17,''))`,
-		tenantID, empresaID, id, customer["codigo_erp"], fmt.Sprintf("API-%d", id), fmt.Sprintf("API-%d", id),
+		tenantID, empresaID, id, customerERP, fmt.Sprintf("API-%d", id), fmt.Sprintf("API-%d", id),
 		input.CEP, input.Logradouro, input.NumeroEndereco, input.ComplementoEndereco, input.Bairro,
 		input.Cidade, input.Estado, dbType, input.EnderecoPadrao, input.PontoReferencia, input.RestricoesHorarios)
 	if err != nil {
 		return nil, fmt.Errorf("criar endereço: %w", err)
 	}
-	addresses, err := r.ListAddresses(ctx, tx, tenantID, empresaID, customerID)
+	return r.addressByID(ctx, tx, tenantID, empresaID, customerID, id)
+}
+
+func (r *Repository) UpdateAddress(ctx context.Context, tx pgx.Tx, tenantID, empresaID, customerID, addressID int, input models.EnderecoCreate, dbType string) (map[string]any, error) {
+	customerERP, err := r.lockCustomer(ctx, tx, tenantID, empresaID, customerID)
 	if err != nil {
 		return nil, err
 	}
-	for _, address := range addresses {
-		if idValue, ok := address["id"].(int32); ok && int(idValue) == id {
-			return address, nil
-		}
-		if idValue, ok := address["id"].(int64); ok && int(idValue) == id {
-			return address, nil
-		}
-		if idValue, ok := address["id"].(int); ok && idValue == id {
-			return address, nil
+
+	tag, err := tx.Exec(ctx, `
+		UPDATE cliente_endereco_adicional
+		SET cep=$1, logradouro=$2, numero_endereco=$3, complemento_endereco=NULLIF($4,''),
+		    bairro=$5, cidade=$6, estado=$7, tipo_endereco=$8, endereco_padrao=$9,
+		    ponto_referencia=NULLIF($10,''), restricoes_horarios=NULLIF($11,''), dt_alteracao=now()
+		WHERE cod_tenant=$12 AND cod_empresa=$13 AND codigo=$14
+		  AND codigo_erp_cliente=$15 AND deletado_em IS NULL`,
+		input.CEP, input.Logradouro, input.NumeroEndereco, input.ComplementoEndereco,
+		input.Bairro, input.Cidade, input.Estado, dbType, input.EnderecoPadrao,
+		input.PontoReferencia, input.RestricoesHorarios, tenantID, empresaID, addressID, customerERP)
+	if err != nil {
+		return nil, fmt.Errorf("atualizar endereço: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return nil, pgx.ErrNoRows
+	}
+
+	if input.EnderecoPadrao {
+		if _, err := tx.Exec(ctx, `
+			UPDATE cliente_endereco_adicional SET endereco_padrao=false
+			WHERE cod_tenant=$1 AND cod_empresa=$2 AND codigo_erp_cliente=$3
+			  AND codigo<>$4 AND deletado_em IS NULL`, tenantID, empresaID, customerERP, addressID); err != nil {
+			return nil, fmt.Errorf("limpar endereços padrão: %w", err)
 		}
 	}
-	return nil, errors.New("endereço criado não foi retornado pela consulta")
+
+	return r.addressByID(ctx, tx, tenantID, empresaID, customerID, addressID)
+}
+
+func (r *Repository) lockCustomer(ctx context.Context, tx pgx.Tx, tenantID, empresaID, customerID int) (string, error) {
+	var customerERP string
+	err := tx.QueryRow(ctx, `
+		SELECT codigo_erp FROM cliente
+		WHERE cod_tenant=$1 AND cod_empresa=$2 AND codigo=$3 AND deletado_em IS NULL
+		FOR UPDATE`, tenantID, empresaID, customerID).Scan(&customerERP)
+	if err != nil {
+		return "", fmt.Errorf("consultar cliente para endereço: %w", err)
+	}
+	return customerERP, nil
+}
+
+func (r *Repository) addressByID(ctx context.Context, tx pgx.Tx, tenantID, empresaID, customerID, addressID int) (map[string]any, error) {
+	rows, err := tx.Query(ctx, `
+		SELECT e.codigo AS id, e.codigo_erp_endereco AS codigo_erp,
+		       CASE e.tipo_endereco WHEN 'C' THEN 'cobranca'
+		            WHEN 'E' THEN 'entrega' WHEN 'A' THEN 'ambos' ELSE NULL END AS tipo_endereco,
+		       e.endereco_padrao, e.cep, e.logradouro, e.numero_endereco,
+		       e.complemento_endereco, e.bairro, e.cidade, e.estado,
+		       e.ponto_referencia, e.restricoes_horarios
+		FROM cliente_endereco_adicional e
+		WHERE e.cod_tenant=$1 AND e.cod_empresa=$2 AND e.codigo=$3
+		  AND e.deletado_em IS NULL
+		  AND e.codigo_erp_cliente=(SELECT c.codigo_erp FROM cliente c
+		    WHERE c.cod_tenant=$1 AND c.cod_empresa=$2 AND c.codigo=$4 AND c.deletado_em IS NULL)`,
+		tenantID, empresaID, addressID, customerID)
+	if err != nil {
+		return nil, fmt.Errorf("consultar endereço atualizado: %w", err)
+	}
+	items, err := db.ReadRows(rows)
+	if err != nil {
+		return nil, fmt.Errorf("ler endereço atualizado: %w", err)
+	}
+	if len(items) == 0 {
+		return nil, pgx.ErrNoRows
+	}
+	return items[0], nil
 }
 
 func (r *Repository) RemoveAddress(ctx context.Context, tx pgx.Tx, tenantID, empresaID, customerID, addressID int) error {

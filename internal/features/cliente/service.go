@@ -134,12 +134,7 @@ func (s *Service) ListAddresses(ctx context.Context, tenantID, empresaID, custom
 }
 
 func (s *Service) CreateAddress(ctx context.Context, tenantID, empresaID, customerID int, input models.EnderecoCreate) (map[string]any, error) {
-	if strings.TrimSpace(input.CEP) == "" || strings.TrimSpace(input.Logradouro) == "" ||
-		strings.TrimSpace(input.NumeroEndereco) == "" || strings.TrimSpace(input.Bairro) == "" ||
-		strings.TrimSpace(input.Cidade) == "" || len(input.Estado) != 2 {
-		return nil, apperrors.InvalidInput("campos obrigatórios do endereço ausentes ou inválidos")
-	}
-	dbType, err := bancoTipoEndereco(input.TipoEndereco)
+	dbType, err := validEndereco(input)
 	if err != nil {
 		return nil, err
 	}
@@ -152,10 +147,34 @@ func (s *Service) CreateAddress(ctx context.Context, tenantID, empresaID, custom
 	return result, err
 }
 
+func (s *Service) UpdateAddress(ctx context.Context, tenantID, empresaID, customerID, addressID int, input models.EnderecoCreate) (map[string]any, error) {
+	dbType, err := validEndereco(input)
+	if err != nil {
+		return nil, err
+	}
+	var result map[string]any
+	err = s.withSession(ctx, tenantID, empresaID, func(tx pgx.Tx) error {
+		var err error
+		result, err = s.repository.UpdateAddress(ctx, tx, tenantID, empresaID, customerID, addressID, input, dbType)
+		return err
+	})
+	return result, err
+}
+
 func (s *Service) RemoveAddress(ctx context.Context, tenantID, empresaID, customerID, addressID int) error {
 	return s.withSession(ctx, tenantID, empresaID, func(tx pgx.Tx) error {
 		return s.repository.RemoveAddress(ctx, tx, tenantID, empresaID, customerID, addressID)
 	})
+}
+
+func validEndereco(input models.EnderecoCreate) (string, error) {
+	if strings.TrimSpace(input.TipoEndereco) == "" || strings.TrimSpace(input.CEP) == "" ||
+		strings.TrimSpace(input.Logradouro) == "" || strings.TrimSpace(input.NumeroEndereco) == "" ||
+		strings.TrimSpace(input.Bairro) == "" || strings.TrimSpace(input.Cidade) == "" ||
+		len(input.Estado) != 2 {
+		return "", apperrors.InvalidInput("campos obrigatórios do endereço ausentes ou inválidos")
+	}
+	return bancoTipoEndereco(input.TipoEndereco)
 }
 
 func (s *Service) Receivables(ctx context.Context, tenantID, empresaID, customerID int) ([]map[string]any, error) {

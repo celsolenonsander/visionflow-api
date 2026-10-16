@@ -62,3 +62,48 @@ func TestDatabaseAddressTypeMapping(t *testing.T) {
 		t.Fatalf("bancoTipoEndereco(residencial) error = %v, want invalid input", err)
 	}
 }
+
+func TestValidEndereco(t *testing.T) {
+	valid := models.EnderecoCreate{
+		TipoEndereco: "entrega", CEP: "01310-100", Logradouro: "Avenida Paulista",
+		NumeroEndereco: "1000", Bairro: "Bela Vista", Cidade: "São Paulo", Estado: "SP",
+	}
+	tests := []struct {
+		name       string
+		input      models.EnderecoCreate
+		wantDBType string
+		wantErr    bool
+	}{
+		{name: "valid", input: valid, wantDBType: "E"},
+		{name: "missing address type", input: models.EnderecoCreate{
+			CEP: valid.CEP, Logradouro: valid.Logradouro, NumeroEndereco: valid.NumeroEndereco,
+			Bairro: valid.Bairro, Cidade: valid.Cidade, Estado: valid.Estado,
+		}, wantErr: true},
+		{name: "invalid address type", input: models.EnderecoCreate{
+			TipoEndereco: "residencial", CEP: valid.CEP, Logradouro: valid.Logradouro,
+			NumeroEndereco: valid.NumeroEndereco, Bairro: valid.Bairro, Cidade: valid.Cidade, Estado: valid.Estado,
+		}, wantErr: true},
+		{name: "missing required field", input: models.EnderecoCreate{
+			TipoEndereco: valid.TipoEndereco, CEP: valid.CEP, Logradouro: valid.Logradouro,
+			NumeroEndereco: valid.NumeroEndereco, Bairro: valid.Bairro, Cidade: valid.Cidade,
+		}, wantErr: true},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := validEndereco(test.input)
+			if (err != nil) != test.wantErr {
+				t.Fatalf("validEndereco() error = %v, wantErr %t", err, test.wantErr)
+			}
+			if test.wantErr {
+				if !errors.Is(err, apperrors.ErrInvalidInput) {
+					t.Fatalf("validEndereco() error = %v, want invalid input", err)
+				}
+				return
+			}
+			if got != test.wantDBType {
+				t.Fatalf("validEndereco() type = %q, want %q", got, test.wantDBType)
+			}
+		})
+	}
+}

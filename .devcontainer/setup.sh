@@ -1,69 +1,117 @@
 #!/bin/bash
-set -e
+set -Eeuo pipefail
 
-echo "═══════════════════════════════════════════════"
-echo "  VisionFlow API — Setup do Codespaces"
-echo "═══════════════════════════════════════════════"
-
-# ─── 1. Instalar cliente PostgreSQL ─────────────
-echo ""
-echo "▸ Instalando cliente PostgreSQL..."
-sudo apt-get update -qq
-sudo apt-get install -y -qq postgresql-client wget
-
-# ─── 2. Instalar Flyway CLI ─────────────────────
-echo ""
-echo "▸ Instalando Flyway CLI..."
+PROJECT_DIR="/workspaces/visionflow-api"
 FLYWAY_VERSION="10.20.1"
-cd /tmp
-wget -q "https://download.red-gate.com/maven/release/com/redgate/flyway/flyway-commandline/${FLYWAY_VERSION}/flyway-commandline-${FLYWAY_VERSION}-linux-x64.tar.gz"
-tar -xzf "flyway-commandline-${FLYWAY_VERSION}-linux-x64.tar.gz"
-sudo ln -sf "/tmp/flyway-${FLYWAY_VERSION}/flyway" /usr/local/bin/flyway
-cd /workspaces/visionflow-api
-echo "  Flyway instalado: $(flyway -v 2>&1 | head -1)"
 
-# ─── 3. Criar .env (se não existir) ─────────────
+echo "==============================================="
+echo " VisionFlow API - Setup do Codespaces"
+echo "==============================================="
+
+cd "$PROJECT_DIR"
+
 echo ""
-echo "▸ Configurando .env..."
-if [ ! -f .env ]; then
-    cp .env.example .env
-    # Substitui a senha pelo valor real do compose
-    sed -i "s|DB_PASSWORD=trocar_pela_senha_real|DB_PASSWORD=epare|" .env
-    # Gera JWT_SECRET aleatório
-    JWT=$(openssl rand -base64 48 | tr -d '\n')
-    sed -i "s|JWT_SECRET=trocar_por_uma_string_longa_e_aleatoria|JWT_SECRET=${JWT}|" .env
-    echo "  .env criado com senha e JWT aleatórios"
-else
-    echo "  .env já existe, mantendo"
+echo ">>> Instalando dependências..."
+
+sudo apt-get update -qq
+sudo apt-get install -y -qq \
+    postgresql-client \
+    wget \
+    openssl \
+    ca-certificates \
+    default-jre-headless
+
+echo ""
+echo ">>> Instalando Flyway..."
+
+if ! command -v flyway >/dev/null 2>&1; then
+    cd /tmp
+
+    wget -q \
+        "https://download.red-gate.com/maven/release/com/redgate/flyway/flyway-commandline/${FLYWAY_VERSION}/flyway-commandline-${FLYWAY_VERSION}-linux-x64.tar.gz" \
+        -O flyway.tar.gz
+
+    tar -xzf flyway.tar.gz
+
+    sudo ln -sf \
+        "/tmp/flyway-${FLYWAY_VERSION}/flyway" \
+        /usr/local/bin/flyway
 fi
 
-# ─── 4. Esperar Postgres ────────────────────────
+cd "$PROJECT_DIR"
+
+flyway -v
+
 echo ""
-echo "▸ Aguardando PostgreSQL..."
-until pg_isready -h postgres -U epare -d epare_forca_de_vendas -q; do
-    echo "  ...aguardando"
+echo ">>> Verificando arquivo .env..."
+
+if [ ! -f .env ]; then
+    cp .env.example .env
+    JWT_SECRET="$(openssl rand -hex 32)"
+
+    sed -i \
+        "s|JWT_SECRET=trocar_por_uma_string_longa_e_aleatoria|JWT_SECRET=${JWT_SECRET}|" \
+        .env
+
+    echo "Arquivo .env criado."
+else
+    echo "Arquivo .env existente preservado."
+fi
+
+# Carrega as configurações sem exibir senhas.
+set -a
+source .env
+set +a
+
+: "${DB_USER:?DB_USER não definido no .env}"
+: "${DB_PASSWORD:?DB_PASSWORD não definido no .env}"
+: "${DB_NAME:?DB_NAME não definido no .env}"
+: "${JWT_SECRET:?JWT_SECRET não definido no .env}"
+
+# No Codespaces, o PostgreSQL é outro serviço do Compose.
+DB_HOST="postgres"
+DB_PORT="5432"
+
+echo ""
+echo ">>> Aguardando PostgreSQL..."
+
+for tentativa in $(seq 1 60); do
+    if PGPASSWORD="$DB_PASSWORD" pg_isready \
+        -h "$DB_HOST" \
+        -p "$DB_PORT" \
+        -U "$DB_USER" \
+        -d "$DB_NAME" \
+        -q; then
+        break
+    fi
+
+    if [ "$tentativa" -eq 60 ]; then
+        echo "ERRO: PostgreSQL não ficou disponível após 120 segundos."
+        exit 1
+    fi
+
     sleep 2
 done
-echo "  PostgreSQL pronto!"
 
-# ─── 5. Rodar migrations ────────────────────────
+echo "PostgreSQL disponível."
+
 echo ""
-echo "▸ Rodando migrations..."
+echo ">>> Executando migrations..."
+
 flyway \
-    -url="jdbc:postgresql://postgres:5432/epare_forca_de_vendas" \
-    -user="epare" \
-    -password="epare" \
-    -locations="filesystem:./db/migrations" \
+    "-url=jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}" \
+    "-user=${DB_USER}" \
+    "-password=${DB_PASSWORD}" \
+    "-locations=filesystem:${PROJECT_DIR}/db/migrations" \
     -baselineOnMigrate=true \
     -baselineVersion=0 \
     migrate
 
-# ─── 6. Pronto ──────────────────────────────────
 echo ""
-echo "═══════════════════════════════════════════════"
-echo "  ✅ Codespace pronto!"
+echo "==============================================="
+echo " VisionFlow API - Setup concluído!"
+echo "==============================================="
 echo ""
-echo "  PostgreSQL: localhost:5432"
-echo "  API:        rode: go run ./cmd/api"
-echo "              acesse: http://localhost:8080/health"
-echo "═══════════════════════════════════════════════"
+go version
+echo "PostgreSQL: ${DB_HOST}:${DB_PORT}"
+echo "Para iniciar a API: go run ./cmd/api"

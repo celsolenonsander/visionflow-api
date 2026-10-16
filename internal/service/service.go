@@ -98,6 +98,10 @@ func (s *Service) CriarEndereco(ctx context.Context, tenantID, empresaID, client
 	return s.cliente.CreateAddress(ctx, tenantID, empresaID, clienteID, input)
 }
 
+func (s *Service) AtualizarEndereco(ctx context.Context, tenantID, empresaID, clienteID, enderecoID int, input models.EnderecoCreate) (map[string]any, error) {
+	return s.cliente.UpdateAddress(ctx, tenantID, empresaID, clienteID, enderecoID, input)
+}
+
 func (s *Service) RemoverEndereco(ctx context.Context, tenantID, empresaID, clienteID, enderecoID int) error {
 	return s.cliente.RemoveAddress(ctx, tenantID, empresaID, clienteID, enderecoID)
 }

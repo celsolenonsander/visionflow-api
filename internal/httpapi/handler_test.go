@@ -163,6 +163,18 @@ func TestProtectedRouteRejectsMissingOrInvalidToken(t *testing.T) {
 	}
 }
 
+func TestUpdateAddressRouteRequiresAuthentication(t *testing.T) {
+	request := httptest.NewRequest(http.MethodPut, "/clientes/7/enderecos/15", strings.NewReader(`{}`))
+	recorder := httptest.NewRecorder()
+
+	(&Handler{}).Routes().ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusUnauthorized {
+		t.Fatalf("PUT /clientes/{id}/enderecos/{enderecoId} status = %d, want %d",
+			recorder.Code, http.StatusUnauthorized)
+	}
+}
+
 func TestDecodeRejectsInvalidRequestBodies(t *testing.T) {
 	tests := []struct {
 		name string
