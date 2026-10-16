@@ -23,6 +23,42 @@ func pedidoAddressCode(identification sql.NullString, erpCode string) string {
 	return identification.String
 }
 
+type pedidoAddress struct {
+	id             int
+	tenantID       int
+	empresaID      int
+	customerERP    string
+	identification sql.NullString
+	erpCode        string
+	deleted        bool
+}
+
+func pedidoAddressIDs(addressCodes [3]*string, addresses []pedidoAddress, tenantID, empresaID int, customerERP string) [3]*int {
+	var ids [3]*int
+	for index, addressCode := range addressCodes {
+		if addressCode == nil {
+			continue
+		}
+		matches := 0
+		for _, address := range addresses {
+			if address.deleted || address.tenantID != tenantID || address.empresaID != empresaID ||
+				address.customerERP != customerERP ||
+				pedidoAddressCode(address.identification, address.erpCode) != *addressCode {
+				continue
+			}
+			matches++
+			if matches == 1 {
+				id := address.id
+				ids[index] = &id
+			} else {
+				ids[index] = nil
+				break
+			}
+		}
+	}
+	return ids
+}
+
 func (s *Service) withSession(ctx context.Context, tenantID, empresaID int, fn func(pgx.Tx) error) error {
 	sess, err := db.NewSession(ctx, s.pool, tenantID, empresaID)
 	if err != nil {
@@ -131,15 +167,19 @@ func (s *Service) PedidoObterAPI(ctx context.Context, tenantID, empresaID, id in
 	var result map[string]any
 	err := s.withSession(ctx, tenantID, empresaID, func(tx pgx.Tx) error {
 		var err error
-		result, err = pedidoDetalhe(ctx, tx, id)
+		result, err = pedidoDetalhe(ctx, tx, tenantID, empresaID, id)
 		return err
 	})
 	return result, err
 }
 
-func pedidoDetalhe(ctx context.Context, tx pgx.Tx, id int) (map[string]any, error) {
+func pedidoDetalhe(ctx context.Context, tx pgx.Tx, tenantID, empresaID, id int) (map[string]any, error) {
 	rows, err := tx.Query(ctx, `
 		SELECT p.codigo AS id,p.codigo_erp,
+		       p.codigo_erp_cliente AS _codigo_erp_cliente,
+		       p.endereco_ident_faturamento AS _endereco_ident_faturamento,
+		       p.endereco_ident_entrega AS _endereco_ident_entrega,
+		       p.endereco_ident_cobranca AS _endereco_ident_cobranca,
 		       COALESCE(p.nosso_codigo_pedido,p.codigo_erp) AS numero,
 		       p.nro_pedido_cliente AS numero_cliente,
 		       CASE WHEN p.e_um_orcamento THEN 'orcamento' ELSE 'pedido' END AS tipo,
@@ -170,7 +210,8 @@ func pedidoDetalhe(ctx context.Context, tx pgx.Tx, id int) (map[string]any, erro
 		  AND fp.codigo_erp=p.codigo_erp_forma_pagamento
 		LEFT JOIN transportadora tr ON tr.cod_tenant=p.cod_tenant AND tr.cod_empresa=p.cod_empresa
 		  AND tr.codigo_erp=p.codigo_erp_transportadora
-		WHERE p.codigo=$1 AND COALESCE(p.apagar_dados_pedido,false)=false`, id)
+		WHERE p.cod_tenant=$1 AND p.cod_empresa=$2 AND p.codigo=$3
+		  AND COALESCE(p.apagar_dados_pedido,false)=false`, tenantID, empresaID, id)
 	if err != nil {
 		return nil, fmt.Errorf("consultar pedido: %w", err)
 	}
@@ -182,6 +223,65 @@ func pedidoDetalhe(ctx context.Context, tx pgx.Tx, id int) (map[string]any, erro
 		return nil, pgx.ErrNoRows
 	}
 	order := orders[0]
+	addressCodes := [3]*string{
+		nil, nil, nil,
+	}
+	for index, key := range []string{
+		"_endereco_ident_faturamento", "_endereco_ident_entrega", "_endereco_ident_cobranca",
+	} {
+		var code sql.NullString
+		if err := code.Scan(order[key]); err != nil {
+			return nil, fmt.Errorf("ler identificador ERP do endereço do pedido: %w", err)
+		}
+		if code.Valid {
+			addressCodes[index] = &code.String
+		}
+	}
+	var addresses []pedidoAddress
+	var customerERP sql.NullString
+	if err := customerERP.Scan(order["_codigo_erp_cliente"]); err != nil {
+		return nil, fmt.Errorf("ler cliente ERP do pedido: %w", err)
+	}
+	if customerERP.Valid {
+		addressRows, err := tx.Query(ctx, `
+			SELECT cod_tenant,cod_empresa,codigo_erp_cliente,codigo,
+			       identificacao_endereco,codigo_erp_endereco
+			FROM cliente_endereco_adicional
+			WHERE cod_tenant=$1 AND cod_empresa=$2 AND codigo_erp_cliente=$3
+			  AND deletado_em IS NULL`,
+			tenantID, empresaID, customerERP.String)
+		if err != nil {
+			return nil, fmt.Errorf("consultar endereços do pedido: %w", err)
+		}
+		for addressRows.Next() {
+			var address pedidoAddress
+			if err := addressRows.Scan(
+				&address.tenantID, &address.empresaID, &address.customerERP, &address.id,
+				&address.identification, &address.erpCode,
+			); err != nil {
+				addressRows.Close()
+				return nil, fmt.Errorf("ler endereços do pedido: %w", err)
+			}
+			addresses = append(addresses, address)
+		}
+		if err := addressRows.Err(); err != nil {
+			addressRows.Close()
+			return nil, fmt.Errorf("ler endereços do pedido: %w", err)
+		}
+		addressRows.Close()
+	}
+	addressIDs := pedidoAddressIDs(addressCodes, addresses, tenantID, empresaID, customerERP.String)
+	for index, key := range []string{
+		"endereco_faturamento_id", "endereco_entrega_id", "endereco_cobranca_id",
+	} {
+		order[key] = addressIDs[index]
+	}
+	for _, key := range []string{
+		"_codigo_erp_cliente",
+		"_endereco_ident_faturamento", "_endereco_ident_entrega", "_endereco_ident_cobranca",
+	} {
+		delete(order, key)
+	}
 	if customerID, ok := order["cliente_id"]; ok && customerID != nil {
 		order["cliente"] = map[string]any{
 			"id": customerID, "nome_razao_social": order["cliente_nome"], "cnpj_cpf": order["cliente_cnpj_cpf"],
@@ -504,7 +604,9 @@ func (s *Service) CriarPedido(ctx context.Context, tenantID, empresaID int, inpu
 			var erpCode string
 			if err := tx.QueryRow(ctx, `SELECT e.identificacao_endereco, e.codigo_erp_endereco
 				FROM cliente_endereco_adicional e
-				WHERE e.codigo=$1 AND e.codigo_erp_cliente=$2`, *addressID, *customerCode).Scan(&identification, &erpCode); err != nil {
+				WHERE e.cod_tenant=$1 AND e.cod_empresa=$2 AND e.codigo=$3
+				  AND e.codigo_erp_cliente=$4 AND e.deletado_em IS NULL`,
+				tenantID, empresaID, *addressID, *customerCode).Scan(&identification, &erpCode); err != nil {
 				return fmt.Errorf("endereço do cliente não encontrado: %w", err)
 			}
 			code := pedidoAddressCode(identification, erpCode)
@@ -537,7 +639,7 @@ func (s *Service) CriarPedido(ctx context.Context, tenantID, empresaID int, inpu
 		if err := insertPedidoItems(ctx, tx, tenantID, empresaID, orderERP, input.Itens, orderDelivery); err != nil {
 			return err
 		}
-		result, err = pedidoDetalhe(ctx, tx, orderID)
+		result, err = pedidoDetalhe(ctx, tx, tenantID, empresaID, orderID)
 		return err
 	})
 	return result, err
@@ -635,7 +737,7 @@ func (s *Service) AtualizarPedido(ctx context.Context, tenantID, empresaID, id i
 		if err := insertPedidoItems(ctx, tx, tenantID, empresaID, orderERP, input.Itens, orderDelivery); err != nil {
 			return err
 		}
-		result, err = pedidoDetalhe(ctx, tx, id)
+		result, err = pedidoDetalhe(ctx, tx, tenantID, empresaID, id)
 		return err
 	})
 	return result, err

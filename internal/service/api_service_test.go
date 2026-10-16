@@ -2,9 +2,97 @@ package service
 
 import (
 	"database/sql"
+	"encoding/json"
 	"testing"
 	"time"
 )
+
+func TestPedidoAddressIDsRoundTrip(t *testing.T) {
+	const tenantID, empresaID = 7, 3
+	const customerERP = "CLI-42"
+	addresses := []pedidoAddress{
+		{
+			id: 101, tenantID: tenantID, empresaID: empresaID, customerERP: customerERP,
+			identification: sql.NullString{String: "FAT-ID", Valid: true}, erpCode: "ERP-FAT",
+		},
+		{
+			id: 202, tenantID: tenantID, empresaID: empresaID, customerERP: customerERP,
+			identification: sql.NullString{Valid: false}, erpCode: "ERP-DEL",
+		},
+		{
+			id: 303, tenantID: tenantID, empresaID: empresaID, customerERP: customerERP,
+			identification: sql.NullString{String: "", Valid: true}, erpCode: "ERP-COB",
+		},
+	}
+
+	// PUT persists these codes, and the detail lookup must reverse them to the same IDs.
+	persistedCodes := [3]*string{}
+	for index, address := range addresses {
+		code := pedidoAddressCode(address.identification, address.erpCode)
+		persistedCodes[index] = &code
+	}
+	ids := pedidoAddressIDs(persistedCodes, addresses, tenantID, empresaID, customerERP)
+	response, err := json.Marshal(map[string]*int{
+		"endereco_faturamento_id": ids[0],
+		"endereco_entrega_id":     ids[1],
+		"endereco_cobranca_id":    ids[2],
+	})
+	if err != nil {
+		t.Fatalf("marshal address IDs: %v", err)
+	}
+	const want = `{"endereco_cobranca_id":303,"endereco_entrega_id":202,"endereco_faturamento_id":101}`
+	if string(response) != want {
+		t.Fatalf("address IDs JSON = %s, want %s", response, want)
+	}
+	if *ids[1] == *ids[2] {
+		t.Fatalf("delivery and billing IDs must differ, both are %d", *ids[1])
+	}
+}
+
+func TestPedidoAddressIDsRejectsCrossScopeDeletedAndAmbiguousMatches(t *testing.T) {
+	const tenantID, empresaID = 7, 3
+	const customerERP = "CLI-42"
+	code := "SHARED"
+	addresses := []pedidoAddress{
+		{
+			id: 10, tenantID: tenantID, empresaID: empresaID, customerERP: customerERP,
+			identification: sql.NullString{String: code, Valid: true}, erpCode: "ERP-10",
+		},
+		{
+			id: 11, tenantID: tenantID, empresaID: empresaID, customerERP: "OTHER-CLIENT",
+			identification: sql.NullString{String: code, Valid: true}, erpCode: "ERP-11",
+		},
+		{
+			id: 12, tenantID: tenantID, empresaID: empresaID + 1, customerERP: customerERP,
+			identification: sql.NullString{String: code, Valid: true}, erpCode: "ERP-12",
+		},
+		{
+			id: 13, tenantID: tenantID + 1, empresaID: empresaID, customerERP: customerERP,
+			identification: sql.NullString{String: code, Valid: true}, erpCode: "ERP-13",
+		},
+		{
+			id: 14, tenantID: tenantID, empresaID: empresaID, customerERP: customerERP,
+			identification: sql.NullString{String: code, Valid: true}, erpCode: "ERP-14", deleted: true,
+		},
+	}
+	codes := [3]*string{&code, nil, nil}
+	ids := pedidoAddressIDs(codes, addresses, tenantID, empresaID, customerERP)
+	if ids[0] == nil || *ids[0] != 10 {
+		t.Fatalf("resolved invoice address ID = %v, want 10", ids[0])
+	}
+	if ids[1] != nil || ids[2] != nil {
+		t.Fatalf("unset address codes should resolve to null, got %v", ids)
+	}
+
+	addresses = append(addresses, pedidoAddress{
+		id: 15, tenantID: tenantID, empresaID: empresaID, customerERP: customerERP,
+		identification: sql.NullString{String: code, Valid: true}, erpCode: "ERP-15",
+	})
+	ids = pedidoAddressIDs(codes, addresses, tenantID, empresaID, customerERP)
+	if ids[0] != nil {
+		t.Fatalf("ambiguous address code resolved to ID %d, want null", *ids[0])
+	}
+}
 
 func TestPedidoAddressCode(t *testing.T) {
 	tests := []struct {
