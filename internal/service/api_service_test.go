@@ -1,9 +1,45 @@
 package service
 
 import (
+	"database/sql"
 	"testing"
 	"time"
 )
+
+func TestPedidoAddressCode(t *testing.T) {
+	tests := []struct {
+		name           string
+		identification sql.NullString
+		erpCode        string
+		want           string
+	}{
+		{
+			name:    "null identification uses ERP code",
+			erpCode: "ERP-123",
+			want:    "ERP-123",
+		},
+		{
+			name:           "empty identification uses ERP code",
+			identification: sql.NullString{String: "", Valid: true},
+			erpCode:        "ERP-123",
+			want:           "ERP-123",
+		},
+		{
+			name:           "nonempty identification takes precedence",
+			identification: sql.NullString{String: "ADDR-456", Valid: true},
+			erpCode:        "ERP-123",
+			want:           "ADDR-456",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := pedidoAddressCode(test.identification, test.erpCode); got != test.want {
+				t.Fatalf("pedidoAddressCode() = %q, want %q", got, test.want)
+			}
+		})
+	}
+}
 
 func TestValidPage(t *testing.T) {
 	tests := []struct {

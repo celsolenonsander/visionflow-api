@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"strconv"
@@ -14,6 +15,13 @@ import (
 )
 
 const defaultPageSize = 20
+
+func pedidoAddressCode(identification sql.NullString, erpCode string) string {
+	if !identification.Valid || identification.String == "" {
+		return erpCode
+	}
+	return identification.String
+}
 
 func (s *Service) withSession(ctx context.Context, tenantID, empresaID int, fn func(pgx.Tx) error) error {
 	sess, err := db.NewSession(ctx, s.pool, tenantID, empresaID)
@@ -492,12 +500,14 @@ func (s *Service) CriarPedido(ctx context.Context, tenantID, empresaID int, inpu
 			if customerCode == nil {
 				return InvalidInput("endereços de pedido exigem cliente_id")
 			}
-			var code string
-			if err := tx.QueryRow(ctx, `SELECT e.identificacao_endereco
+			var identification sql.NullString
+			var erpCode string
+			if err := tx.QueryRow(ctx, `SELECT e.identificacao_endereco, e.codigo_erp_endereco
 				FROM cliente_endereco_adicional e
-				WHERE e.codigo=$1 AND e.codigo_erp_cliente=$2`, *addressID, *customerCode).Scan(&code); err != nil {
+				WHERE e.codigo=$1 AND e.codigo_erp_cliente=$2`, *addressID, *customerCode).Scan(&identification, &erpCode); err != nil {
 				return fmt.Errorf("endereço do cliente não encontrado: %w", err)
 			}
+			code := pedidoAddressCode(identification, erpCode)
 			addressCodes[i] = &code
 		}
 		var orderID int
@@ -586,16 +596,19 @@ func (s *Service) AtualizarPedido(ctx context.Context, tenantID, empresaID, id i
 			if addressID == nil {
 				continue
 			}
-			var code string
-			if err := tx.QueryRow(ctx, `SELECT identificacao_endereco FROM cliente_endereco_adicional
+			var identification sql.NullString
+			var erpCode string
+			if err := tx.QueryRow(ctx, `SELECT identificacao_endereco, codigo_erp_endereco
+				FROM cliente_endereco_adicional
 				WHERE cod_tenant=$1 AND cod_empresa=$2 AND codigo=$3
 				  AND codigo_erp_cliente=$4 AND deletado_em IS NULL`,
-				tenantID, empresaID, *addressID, *customerCode).Scan(&code); err != nil {
+				tenantID, empresaID, *addressID, *customerCode).Scan(&identification, &erpCode); err != nil {
 				if errors.Is(err, pgx.ErrNoRows) {
 					return InvalidInput("endereço do cliente inválido")
 				}
 				return fmt.Errorf("validar endereço do pedido: %w", err)
 			}
+			code := pedidoAddressCode(identification, erpCode)
 			addressCodes[index] = &code
 		}
 		_, err = tx.Exec(ctx, `UPDATE pedido SET
